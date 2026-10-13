@@ -440,6 +440,10 @@ Also added after a question from the user: `stop_session` works for any session 
 by a server, or standalone in a terminal; the latter get two SIGINTs like a person's Ctrl-C),
 and `stop_server` accepts a server running in the root folder itself.
 
+Changed 2026-10-13 after real use: `create_project` with a prompt now starts only the handoff
+session, not the folder server as well. The server's pre-created idle session had shown up as a
+second "CCA <project>" entry next to the working one. `start_server` adds the server later.
+
 Notes:
 
 - The prompt is passed via a file (`…/ClaudeCodeAnywhere/prompts/<tmux>.txt`) and

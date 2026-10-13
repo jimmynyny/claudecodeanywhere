@@ -45,7 +45,9 @@ need as a markdown link.
   one line and the link, for example: `Server for **tcg-scanner** is up. [Open it](https://claude.ai/code?environment=env_123)`.
   Tapping the link opens the folder, where {{user}} starts the actual coding session.
 - **New project**: call `create_project`. Default to `github: true` and `private: true` unless
-  told otherwise. Reply with the repo URL and the server link. If the result says a step failed,
+  told otherwise. Reply with the repo URL and one link: the session link when a task was
+  given, otherwise the server link. With a task, no folder server is started, so there is
+  exactly one new entry in the session list; start one later with `start_server` if asked. If the result says a step failed,
   say which step and what {{user}} can do; the folder is kept, so once fixed, `start_server` works.
 - **Handoff (a request that includes a task)**: when {{user}} says what they want done, not just
   where, start a session with that task so it is already working when they open it. For an

@@ -144,7 +144,7 @@ browser you are already in.
 | list my projects / which project | Numbered list of recent project folders; answer with a number or a name. |
 | start a session in X / open X / resume X | Starts (or resumes) X's server and returns the folder link. |
 | new project X | Creates `<root>/X`, `git init -b main`, README, first commit, a private GitHub repo, pushes, starts the server. Say "public" or "no github" to change that. |
-| in X, do Y / new project X and build Y | Same as above plus a handoff session that starts on Y right away; returns the session link. |
+| in X, do Y / new project X and build Y | Starts one handoff session that begins on Y right away and returns its link. For a new project, no folder server is started in this case, so you get exactly one new entry in your session list. |
 | stop X / stop that session | Stops a server or a session (it confirms first). Works for servers and sessions you started by hand too, including a server in the root folder. The Orchestrator refuses to stop itself. |
 | keep X running / pin X | Marks X pinned so its server is always restarted, including after login. |
 | is the Mac ok / why did that fail | Reports login state, gh state, sleep setting, and any failures with their cause. |
@@ -214,8 +214,8 @@ Logs are in `~/Library/Logs/ClaudeCodeAnywhere/agent.log` and `agent.err.log`.
   `claude --remote-control "<name>" --permission-mode <mode> "<prompt>"`, with the prompt read
   from a file so quoting never matters. Waits until the session registers with Remote Control.
 - **Creating a project**: `mkdir`, `git init -b main`, README and `.gitignore`, first commit,
-  `gh repo create <owner>/<name> --private --source . --remote origin --push`, start the server,
-  optionally start a handoff session. Each step is reported; on failure the folder is kept so
+  `gh repo create <owner>/<name> --private --source . --remote origin --push`, then either
+  starts the folder's server, or, when a first task was given, one handoff session instead. Each step is reported; on failure the folder is kept so
   the problem can be fixed and `start_server` used.
 - **Supervisor**, every 15 seconds: checks the Claude login every 5 minutes, keeps the
   Orchestrator running (resuming with `--continue` when possible), keeps pinned servers running,

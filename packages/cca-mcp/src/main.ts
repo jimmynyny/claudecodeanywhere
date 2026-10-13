@@ -106,14 +106,14 @@ server.registerTool(
   'create_project',
   {
     title: 'Create a new project folder, git repo, GitHub repo, and server',
-    description: 'Creates <root>/<name>, runs git init on branch main with a README and first commit, optionally creates a GitHub repo (private by default) and pushes, then starts a Remote Control server and returns its link. Takes 5 to 20 seconds. On failure the response names the step that failed; the folder is left in place so the problem can be fixed and start_server used afterwards.',
+    description: 'Creates <root>/<name>, runs git init on branch main with a README and first commit, optionally creates a GitHub repo (private by default) and pushes, then starts either a Remote Control server (no prompt) or one handoff session (with prompt) and returns the link. Takes 5 to 20 seconds. On failure the response names the step that failed; the folder is left in place so the problem can be fixed and start_server used afterwards.',
     inputSchema: {
       name: z.string().describe('Folder and repo name: letters, digits, dots, dashes, underscores'),
       github: z.boolean().optional().describe('Create a GitHub repo and push (default true)'),
       private: z.boolean().optional().describe('Make the GitHub repo private (default true)'),
       description: z.string().optional().describe('One line for the README and the GitHub repo description'),
-      start: z.boolean().optional().describe('Start the Remote Control server when done (default true)'),
-      prompt: z.string().optional().describe('A first task. When given, a session is started in the new project with this prompt and begins working immediately; its link is returned as `session.link`.'),
+      start: z.boolean().optional().describe('Start the folder\'s Remote Control server when done (default true). Ignored when prompt is given.'),
+      prompt: z.string().optional().describe('A first task. When given, exactly one session is started in the new project with this prompt and begins working immediately; its link is returned as `session.link`. No folder server is started, so the user sees one entry, not two; start_server can add the server later.'),
     },
   },
   (input) => wrap(() => call('POST', '/api/projects', input)),

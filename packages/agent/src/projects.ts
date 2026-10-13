@@ -161,13 +161,14 @@ export class Projects {
       this.gitCache.delete(folder);
     }
 
+    // With a first prompt, start only the handoff session: a folder server would add a second,
+    // idle pre-created session to the user's list for nothing. The server can be started later.
     let server: ServerView | null = null;
-    if (input.start) {
-      server = await jobs.step(job, 'Start Remote Control server', () => this.servers.start(folder, { name }), (s) => s.link ?? '');
-    }
     let session: HandoffSessionView | null = null;
     if (input.prompt) {
       session = await jobs.step(job, 'Start session with the first prompt', () => this.servers.startSession(folder, { prompt: input.prompt! }), (s) => s.link);
+    } else if (input.start) {
+      server = await jobs.step(job, 'Start Remote Control server', () => this.servers.start(folder, { name }), (s) => s.link ?? '');
     }
     return { folder, slug: slugOf(folder), repoUrl, server, session };
   }
