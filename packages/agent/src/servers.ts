@@ -60,7 +60,11 @@ export interface HandoffSessionView {
 }
 
 export interface Snapshot {
+  /** Multi-session `claude remote-control` servers, running or recently stopped. */
   servers: ServerView[];
+  /** Single interactive sessions CCA started with a first prompt. Independent of any server. */
+  handoffSessions: ServerView[];
+  /** Sessions not under a server and not started by CCA (plain `claude` in a terminal). */
   standaloneSessions: SessionView[];
   takenAt: number;
 }
@@ -139,6 +143,7 @@ export class ServerManager {
     const byPid = new Map(registry.map((s) => [s.pid, s]));
     const paneByPid = new Map(panes.map((p) => [p.panePid, p]));
     const servers: ServerView[] = [];
+    const handoffSessions: ServerView[] = [];
     const claimed = new Set<number>();
 
     for (const proc of table.claude) {
@@ -187,15 +192,16 @@ export class ServerManager {
         if (link) this.linkCache.set(proc.pid, link);
       }
 
-      servers.push({
+      const handoff = proc.kind === 'rc-interactive' && (tmuxSession?.startsWith('cca-') ?? false);
+      (handoff ? handoffSessions : servers).push({
         folder: folder ?? '(unknown)',
         slug: folder ? slugOf(folder) : '?',
         name: proc.name ?? record?.name ?? path.basename(folder ?? ''),
         pid: proc.pid,
         state: 'running',
-        origin: record ? 'agent' : 'manual',
+        origin: handoff || record ? 'agent' : 'manual',
         spawn: proc.kind === 'rc-interactive' ? 'interactive' : (proc.spawn ?? record?.spawn ?? 'same-dir'),
-        handoff: proc.kind === 'rc-interactive' && (tmuxSession?.startsWith('cca-') ?? false),
+        handoff,
         tmuxSession,
         link,
         id: link ? cc.linkId(link) : null,
@@ -243,13 +249,13 @@ export class ServerManager {
     if (dirty) saveState(this.state);
 
     const standaloneSessions = registry.filter((s) => !claimed.has(s.pid)).map(toSessionView);
-    return { servers, standaloneSessions, takenAt: now };
+    return { servers, handoffSessions, standaloneSessions, takenAt: now };
   }
 
   async running(folder: string): Promise<ServerView | null> {
     const f = path.resolve(folder);
     const snap = await this.snapshot();
-    return snap.servers.find((s) => s.folder === f && s.state === 'running' && !s.handoff) ?? null;
+    return snap.servers.find((s) => s.folder === f && s.state === 'running') ?? null;
   }
 
   async start(folderIn: string, opts: StartOptions = {}): Promise<ServerView> {
@@ -445,7 +451,7 @@ export class ServerManager {
     const snap = await this.snapshot();
     const match = (x: SessionView) => x.name === id || x.sessionId === id || String(x.pid) === id;
 
-    const handoff = snap.servers.find((v) => v.handoff && (v.tmuxSession === id || v.name === id || v.sessions.some(match)));
+    const handoff = snap.handoffSessions.find((v) => v.tmuxSession === id || v.name === id || v.sessions.some(match));
     if (handoff?.tmuxSession) {
       const target = tmux.sessionTarget(handoff.tmuxSession);
       await tmux.sendKeys(target, ['C-c']);

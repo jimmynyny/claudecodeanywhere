@@ -70,7 +70,7 @@ server.registerTool(
   'list_sessions',
   {
     title: 'List Remote Control servers and sessions',
-    description: 'Every Remote Control server on this Mac (running or recently stopped and resumable) with its link and the sessions it hosts, including idle/busy/waiting status. Also lists sessions that are not under a server.',
+    description: 'Three independent lists: `servers` (multi-session claude remote-control servers per folder, with the sessions they host), `handoffSessions` (single sessions CCA started with a task; each is its own process and is NOT hosted by, or affected by, the folder server), and `standaloneSessions` (plain claude sessions someone started in a terminal). Each entry has idle/busy/waiting status and a link.',
     inputSchema: {},
   },
   () => wrap(() => call('GET', '/api/sessions')),

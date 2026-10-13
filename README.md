@@ -76,8 +76,9 @@ instructions or tools change, so updates take effect without you doing anything.
 
 **Servers vs sessions, as `list_sessions` reports them.** A *server* is a `claude remote-control`
 process for a folder; it can host many sessions, created from the Claude app or by CCA, and each
-hosted session has its own link. A *standalone session* is a plain `claude` someone started in a
-terminal: if Remote Control was turned on inside it (`/rc`), it has a link; otherwise it is
+hosted session has its own link. A *handoff session* is a single `claude` process CCA started
+with a task; it is independent of the folder's server, so stopping one never affects the other.
+A *standalone session* is a plain `claude` someone started in a terminal: if Remote Control was turned on inside it (`/rc`), it has a link; otherwise it is
 terminal-only and shows "no link". CCA discovers all of them, whoever started them, and can stop
 any of them: servers and handoff sessions get Ctrl-C in their tmux window; hosted and standalone
 sessions get the same interrupt signals a person would send, so Claude Code saves the
@@ -229,7 +230,7 @@ Logs are in `~/Library/Logs/ClaudeCodeAnywhere/agent.log` and `agent.err.log`.
 | - | - | - |
 | `list_status` | | Machine health, warnings, Orchestrator link, counts. |
 | `list_projects` | `query?` | Folders under the root with git branch, remote, last commit, pinned flag, server state. |
-| `list_sessions` | | Every server (running or resumable) and its sessions; handoff sessions flagged; standalone sessions. |
+| `list_sessions` | | Three lists: servers (with the sessions they host), handoff sessions (independent single sessions CCA started with a task), standalone sessions. |
 | `start_server` | `project`, `name?`, `spawn?`, `permission_mode?` | The server, with its folder link. |
 | `stop_server` | `project` | Stopped state and resume deadline. |
 | `start_session` | `project`, `prompt`, `name?`, `permission_mode?` | The handoff session, with its link. |

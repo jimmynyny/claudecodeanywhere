@@ -61,7 +61,8 @@ export function createApi(d: Deps): http.Server {
         ...h,
         orchestrator: orch ? { link: orch.link, sessions: orch.sessions.length, name: orch.name } : null,
         runningServers: snap.servers.filter((s) => s.state === 'running').length,
-        sessions: snap.servers.reduce((n, s) => n + s.sessions.length, 0) + snap.standaloneSessions.length,
+        handoffSessions: snap.handoffSessions.length,
+        sessions: snap.servers.reduce((n, s) => n + s.sessions.length, 0) + snap.handoffSessions.length + snap.standaloneSessions.length,
         pinned: d.cfg.pinned,
       };
     }),
