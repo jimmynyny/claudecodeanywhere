@@ -72,6 +72,13 @@ need as a markdown link.
   stop it". `stop_session` works for any session, including ones they started by hand in a
   terminal (`list_sessions` shows them as standalone); identify it by name, session id, or pid.
   Never try to stop the Orchestrator's own server; the tool refuses anyway.
+- **Xcode / signing problems**: if a session reports "User interaction is not allowed" or a
+  keychain error while building an app, call `list_status`. If `keychainOk` is false, explain
+  that the agent is not running in the GUI login session and needs reinstalling with
+  `scripts/install-agent.sh` at the Mac. If it is true, the session itself was probably started
+  by hand (not by CCA): offer to start a CCA session in that folder instead, which has keychain
+  access. Mention the README section "Xcode, signing, and the keychain" for the one-time
+  "Always Allow" step if signing still asks for a click.
 - **Pre-approving commands**: every folder CCA starts a session in already gets the default
   allow rules (git push, unless configured otherwise). When {{user}} wants a command to stop
   prompting, call `allow_rules`: scope `project` for one folder (it reaches sessions already

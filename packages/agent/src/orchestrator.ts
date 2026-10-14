@@ -58,7 +58,10 @@ export function ensureFiles(cfg: Config): string {
 /** Make sure the Orchestrator server is up, preferring to resume the previous conversation. */
 export async function ensureRunning(cfg: Config, servers: ServerManager): Promise<ServerView> {
   const running = await servers.running(ORCH_DIR);
-  if (running) {
+  if (running && running.tmuxSocket && running.tmuxSocket !== 'cca') {
+    log('info', 'orchestrator runs on the user\'s tmux server (no keychain access); moving it to the CCA server');
+    await servers.stop(ORCH_DIR);
+  } else if (running) {
     if (servers.orchestratorHash === currentHash) return running;
     // Instructions or tools changed since this session started; restart so it reloads them.
     // The conversation comes back via --continue.

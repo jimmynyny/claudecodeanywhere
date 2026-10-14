@@ -160,8 +160,10 @@ Tips:
   your phone is notified.
 - You can also use Claude Code's own session list directly: once a project's server is running,
   the Claude app can start new sessions in that folder without the Orchestrator.
-- At the desk, `tmux attach -t cca-<project>` shows a server's screen and
-  `tmux attach -t cca-<project>-s1` a handoff session's. Detach with `Ctrl-b d`.
+- At the desk, `tmux -L cca attach -t cca-<project>` shows a server's screen and
+  `tmux -L cca attach -t cca-<project>-s1` a handoff session's. Detach with `Ctrl-b d`. CCA
+  runs its own tmux server (socket `cca`), separate from any tmux you start yourself; see
+  [Xcode, signing, and the keychain](#xcode-signing-and-the-keychain) for why.
 
 ## Permission modes
 
@@ -180,6 +182,35 @@ Claude Code's permission mode decides which actions a session may take without a
   `.claude/settings.local.json`, which Claude Code keeps out of git. Claude Code reloads that
   file live, so the `allow_rules` tool can switch a rule on for sessions that are already
   running. Rules use Claude Code's own syntax; `Bash(npm test:*)` allows any `npm test …`.
+
+## Xcode, signing, and the keychain
+
+Building and signing iOS or macOS apps needs the login keychain, where your signing keys live.
+macOS only hands the keychain to processes in your GUI login session. A tmux server started
+from an SSH session is not in that session, and neither is anything it spawns, ever: inside it,
+`security` answers "User interaction is not allowed" and `xcodebuild` cannot sign. Unlocking the
+keychain in the SSH shell does not help, because the lock state belongs to the session, not the
+file.
+
+CCA avoids this by running its own tmux server, on socket `cca`, started by the agent, which
+launchd runs inside your GUI login session. Every server and session CCA starts inherits that
+session, so `xcodebuild`, `codesign`, `security`, and anything else that needs the keychain
+works exactly as it does in a terminal window at the desk. `list_status` reports `keychainOk`
+and the number of code-signing identities the agent can see; a warning appears if the keychain
+is not reachable.
+
+Two things can still get in the way:
+
+- **A key that still asks for a click.** The first time a tool such as `codesign` uses a
+  signing key, macOS shows an "allow access" dialog, which nobody is there to click. Grant it
+  once at the desk by clicking "Always Allow", or grant it from a terminal for the Apple tools:
+  `security set-key-partition-list -S apple-tool:,apple: -s -k '<login password>' ~/Library/Keychains/login.keychain-db`.
+- **A keychain that locks itself.** Keychain Access → login keychain → Settings: if "Lock after
+  N minutes" or "Lock when sleeping" is on, the keychain locks while you are away and signing
+  waits for a password. Turn both off on a machine that builds unattended.
+
+Servers you started by hand in your own tmux keep whatever session they were born in. To give one
+keychain access, stop it and let CCA start it: "start a session in X".
 
 ## Configuration
 
@@ -262,9 +293,9 @@ launchctl kickstart -k gui/$(id -u)/com.claudecodeanywhere.agent
 launchctl bootout gui/$(id -u)/com.claudecodeanywhere.agent
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.claudecodeanywhere.agent.plist
 
-# see what is running in tmux
-tmux ls
-tmux attach -t cca-orchestrator      # Ctrl-b d to detach
+# see what is running in CCA's tmux server
+tmux -L cca ls
+tmux -L cca attach -t cca-orchestrator      # Ctrl-b d to detach
 
 # update to a new version
 git pull && ./install.sh --yes      # reinstalls deps and restarts the agent; the Orchestrator reloads itself
@@ -284,6 +315,7 @@ Orchestrator's server (Ctrl-C in its tmux window) makes the agent resume it with
 | "Remote Control has not been enabled on this Mac yet" | Run `claude remote-control` once in a terminal there and accept. |
 | Sessions go offline at night | The Mac sleeps. `sudo pmset -c sleep 0`, or set `preventSleep: true`. |
 | Links missing for hand-started servers | They were started outside tmux, so there is no screen to read. The sessions still list with their own links. |
+| `xcodebuild` or `codesign` fails with "User interaction is not allowed" | The session is not in the GUI login session. If it is a CCA session, check `keychainOk` in `list_status` and reinstall the agent; if you started it by hand over SSH, let CCA start it instead. See the keychain section. |
 | Everything offline after a reboot | FileVault is waiting for a password at the login screen. |
 
 ## Repository layout
@@ -325,6 +357,8 @@ listed in PLAN.md section 2, so a Claude Code update that breaks discovery has o
 
 ## Security notes
 
+- CCA's tmux server runs inside your GUI login session so sessions can use the login keychain
+  for code signing. That is the same access a terminal window at the desk has.
 - The agent binds to localhost only. Nothing is exposed to the network; all remote access goes
   through Anthropic's Remote Control, which is outbound-only from the Mac.
 - The Orchestrator and every session it starts are full Claude Code sessions on your Mac, with

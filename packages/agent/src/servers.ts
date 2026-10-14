@@ -34,6 +34,8 @@ export interface ServerView {
   /** True for a single interactive session CCA started with a first prompt (M4 handoff). */
   handoff: boolean;
   tmuxSession: string | null;
+  /** `cca` for the agent's own tmux server (GUI session, keychain works), `default` for the user's. */
+  tmuxSocket: string | null;
   link: string | null;
   id: string | null;
   startedAt: number | null;
@@ -53,6 +55,7 @@ export interface HandoffSessionView {
   slug: string;
   name: string;
   tmuxSession: string;
+  tmuxSocket: string;
   pid: number;
   sessionId: string;
   link: string;
@@ -159,8 +162,8 @@ export class ServerManager {
         }
       }
       const tmuxSession = pane?.session ?? null;
-      const record = tmuxSession
-        ? Object.values(this.state.servers).find((r) => r.tmuxSession === tmuxSession)
+      const record = pane
+        ? Object.values(this.state.servers).find((r) => r.tmuxSession === pane!.session && r.tmuxSocket === pane!.socket)
         : undefined;
 
       const sessions: SessionView[] = [];
@@ -189,7 +192,7 @@ export class ServerManager {
 
       let link: string | null = record?.link ?? this.linkCache.get(proc.pid) ?? null;
       if (!link && pane) {
-        link = cc.extractLink(await tmux.capturePane(pane.target, 300));
+        link = cc.extractLink(await tmux.capturePane(pane.target, 300, pane.socket));
         if (link) this.linkCache.set(proc.pid, link);
       }
 
@@ -204,6 +207,7 @@ export class ServerManager {
         spawn: proc.kind === 'rc-interactive' ? 'interactive' : (proc.spawn ?? record?.spawn ?? 'same-dir'),
         handoff,
         tmuxSession,
+        tmuxSocket: pane?.socket ?? null,
         link,
         id: link ? cc.linkId(link) : null,
         startedAt: record?.startedAt ?? null,
@@ -238,6 +242,7 @@ export class ServerManager {
           spawn: r.spawn,
           handoff: false,
           tmuxSession: null,
+          tmuxSocket: null,
           link: r.link,
           id: r.id,
           startedAt: r.startedAt,
@@ -311,6 +316,7 @@ export class ServerManager {
             spawn: opts.continue ? (prev?.spawn ?? spawn) : spawn,
             permissionMode,
             tmuxSession,
+            tmuxSocket: tmux.CCA_SOCKET,
             startedAt,
             stoppedAt: null,
             link,
@@ -325,7 +331,7 @@ export class ServerManager {
           // Registry may lag a beat; synthesize from the record.
           return {
             folder, slug: slugOf(folder), name, pid: null, state: 'running', origin: 'agent', spawn: rec.spawn, handoff: false,
-            tmuxSession, link, id: rec.id, startedAt, stoppedAt: null, resumableUntil: null, sessions: [],
+            tmuxSession, tmuxSocket: tmux.CCA_SOCKET, link, id: rec.id, startedAt, stoppedAt: null, resumableUntil: null, sessions: [],
           };
         }
         if (/Enable Remote Control\? \(y\/n\)/i.test(pane)) {
@@ -363,7 +369,8 @@ export class ServerManager {
     const s = await this.running(folder);
     if (!s) return { folder, state: 'stopped', note: 'No running server for this folder' };
 
-    if (s.tmuxSession) await tmux.sendKeys(tmux.sessionTarget(s.tmuxSession), ['C-c']);
+    const socket = s.tmuxSocket ?? tmux.DEFAULT_SOCKET;
+    if (s.tmuxSession) await tmux.sendKeys(tmux.sessionTarget(s.tmuxSession), ['C-c'], socket);
     else if (s.pid) process.kill(s.pid, 'SIGINT');
 
     const deadline = Date.now() + 15_000;
@@ -372,7 +379,7 @@ export class ServerManager {
       process.kill(s.pid, 'SIGTERM');
       await sleep(2000);
     }
-    if (s.origin === 'agent' && s.tmuxSession) await tmux.killSession(s.tmuxSession);
+    if (s.origin === 'agent' && s.tmuxSession) await tmux.killSession(s.tmuxSession, socket);
 
     const rec = this.state.servers[folder];
     if (rec) {
@@ -425,7 +432,7 @@ export class ServerManager {
         if (reg?.bridgeSessionId) {
           log('info', 'handoff session up', { tmuxSession, link: cc.sessionLink(reg.bridgeSessionId), seconds: Math.round((Date.now() - startedAt) / 1000) });
           return {
-            folder, slug: slugOf(folder), name, tmuxSession, pid: reg.pid, sessionId: reg.sessionId,
+            folder, slug: slugOf(folder), name, tmuxSession, tmuxSocket: tmux.CCA_SOCKET, pid: reg.pid, sessionId: reg.sessionId,
             link: cc.sessionLink(reg.bridgeSessionId), permissionMode, startedAt,
           };
         }
@@ -457,11 +464,12 @@ export class ServerManager {
     const handoff = snap.handoffSessions.find((v) => v.tmuxSession === id || v.name === id || v.sessions.some(match));
     if (handoff?.tmuxSession) {
       const target = tmux.sessionTarget(handoff.tmuxSession);
-      await tmux.sendKeys(target, ['C-c']);
+      const socket = handoff.tmuxSocket ?? tmux.DEFAULT_SOCKET;
+      await tmux.sendKeys(target, ['C-c'], socket);
       await sleep(800);
-      await tmux.sendKeys(target, ['C-c']); // Claude Code exits on a second Ctrl-C
+      await tmux.sendKeys(target, ['C-c'], socket); // Claude Code exits on a second Ctrl-C
       await this.waitExit(handoff.pid);
-      await tmux.killSession(handoff.tmuxSession);
+      await tmux.killSession(handoff.tmuxSession, socket);
       log('info', 'handoff session stopped', { tmuxSession: handoff.tmuxSession });
       return { stopped: true, name: handoff.name, note: 'Stopped. The conversation can be resumed with `claude --resume` in that folder.' };
     }

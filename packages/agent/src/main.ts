@@ -6,12 +6,18 @@ import { Jobs } from './jobs.ts';
 import { Supervisor } from './supervisor.ts';
 import { createApi } from './api.ts';
 import * as orchestrator from './orchestrator.ts';
+import * as tmux from './tmux.ts';
 import { log } from './log.ts';
 
 const cfg = loadConfig();
 log('info', `Claude Code Anywhere agent ${AGENT_VERSION} starting`, { config: CONFIG_PATH, root: cfg.rootDir, port: cfg.port, machine: cfg.machineName });
 
 orchestrator.ensureFiles(cfg);
+
+// CCA's tmux server must be started by this process so its panes inherit the GUI login session
+// (login keychain for code signing). Start it before anything else can.
+const tmuxState = await tmux.ensureServer();
+log('info', `CCA tmux server ${tmuxState} (socket ${tmux.CCA_SOCKET})`);
 
 const servers = new ServerManager(cfg);
 const projects = new Projects(cfg, servers);

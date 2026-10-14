@@ -449,6 +449,14 @@ to `.claude/settings.local.json` of every folder CCA starts a server or session 
 `allow_rules` tool adds rules to a project or to `~/.claude/settings.json`. Claude Code reloads
 settings files live, so this also reaches sessions already running.
 
+Added 2026-10-14: CCA runs its own tmux server (`tmux -L cca`), started by the agent from the
+GUI launchd domain. Reason: a tmux server born in an SSH session keeps that security session,
+so every pane it spawns lacks the login keychain and Xcode signing fails with "User interaction
+is not allowed"; unlocking in SSH does not carry over. Verified: inside a server started from
+`gui/<uid>` launchd, `security show-keychain-info` succeeds where the SSH-born server fails. The
+agent migrates its own servers off the default socket automatically; hand-started ones are left
+alone. `list_status` now reports `keychainOk` and the count of code-signing identities.
+
 Notes:
 
 - The prompt is passed via a file (`…/ClaudeCodeAnywhere/prompts/<tmux>.txt`) and

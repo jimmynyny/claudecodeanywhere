@@ -11,6 +11,8 @@ export interface ServerRecord {
   spawn: string;
   permissionMode: string | null;
   tmuxSession: string;
+  /** tmux server socket name: `cca` (agent's own server) or `default` (records from before it existed). */
+  tmuxSocket: string;
   startedAt: number;
   stoppedAt: number | null;
   link: string | null;
@@ -30,7 +32,9 @@ const STATE_PATH = path.join(APP_DIR, 'state.json');
 export function loadState(): State {
   try {
     const raw = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8')) as Partial<State>;
-    return { servers: raw.servers ?? {}, orchestratorHash: raw.orchestratorHash ?? null };
+    const servers = raw.servers ?? {};
+    for (const r of Object.values(servers)) r.tmuxSocket ??= 'default';
+    return { servers, orchestratorHash: raw.orchestratorHash ?? null };
   } catch {
     return { servers: {}, orchestratorHash: null };
   }

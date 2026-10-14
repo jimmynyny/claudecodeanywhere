@@ -81,7 +81,11 @@ export class Supervisor {
   private async ensure(key: string, folder: string, startFn: () => Promise<unknown>, always = false): Promise<void> {
     const b = this.backoff.get(key);
     if (b && Date.now() < b.nextAt) return;
-    if (!always && (await this.servers.running(folder))) {
+    const cur = await this.servers.running(folder);
+    if (cur && cur.origin === 'agent' && cur.tmuxSocket && cur.tmuxSocket !== 'cca' && !always) {
+      log('info', `${key}: moving to the CCA tmux server (GUI session, keychain access)`);
+      await this.servers.stop(folder);
+    } else if (!always && cur) {
       this.backoff.delete(key);
       return;
     }
