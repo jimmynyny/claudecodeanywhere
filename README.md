@@ -148,6 +148,7 @@ browser you are already in.
 | in X, do Y / new project X and build Y | Starts one handoff session that begins on Y right away and returns its link. For a new project, no folder server is started in this case, so you get exactly one new entry in your session list. |
 | stop X / stop that session | Stops a server or a session (it confirms first). Works for servers and sessions you started by hand too, including a server in the root folder. The Orchestrator refuses to stop itself. |
 | keep X running / pin X | Marks X pinned so its server is always restarted, including after login. |
+| let sessions push without asking / enable auto git push in X / stop asking about npm test | Adds a permission allow rule for that folder (reaches running sessions) or, if you say "for all my sessions", for every session on the Mac. "From now on" also makes it a default for future CCA sessions. |
 | is the Mac ok / why did that fail | Reports login state, gh state, sleep setting, and any failures with their cause. |
 
 Tips:
@@ -174,6 +175,11 @@ Claude Code's permission mode decides which actions a session may take without a
   Either can be overridden per request by telling the Orchestrator, for example "in plan mode".
 - **The Orchestrator** runs in Claude Code's default mode with the `cca` tools pre-approved.
   Anything else it tries to do prompts, and that prompt reaches your phone.
+- **Allow rules** sit on top of any mode. Every folder CCA starts a server or session in gets
+  the rules in `allowRules` (default `Bash(git push:*)`) written to its
+  `.claude/settings.local.json`, which Claude Code keeps out of git. Claude Code reloads that
+  file live, so the `allow_rules` tool can switch a rule on for sessions that are already
+  running. Rules use Claude Code's own syntax; `Bash(npm test:*)` allows any `npm test …`.
 
 ## Configuration
 
@@ -189,6 +195,7 @@ Claude Code's permission mode decides which actions a session may take without a
 | `defaultSpawn` | `same-dir` | `same-dir` or `worktree` for sessions created in a project's server. |
 | `defaultPermissionMode` | `null` | Permission mode for project servers; `null` is Claude Code's default. |
 | `handoffPermissionMode` | `auto` | Permission mode for handoff sessions. |
+| `allowRules` | `["Bash(git push:*)"]` | Permission allow rules written into every folder CCA starts a server or session in. |
 | `pinned` | `[]` | Project folder names whose server is always kept running. |
 | `orchestrator.enabled` | `true` | Set `false` to run the agent without an Orchestrator. |
 | `orchestrator.permissionMode` | `null` | Permission mode for the Orchestrator session. |
@@ -236,11 +243,12 @@ Logs are in `~/Library/Logs/ClaudeCodeAnywhere/agent.log` and `agent.err.log`.
 | `start_session` | `project`, `prompt`, `name?`, `permission_mode?` | The handoff session, with its link. |
 | `stop_session` | `session` (name, id, pid, or tmux session) | Whether it was stopped; works for handoff, hosted, and standalone sessions. |
 | `create_project` | `name`, `github?`, `private?`, `description?`, `start?`, `prompt?` | Job steps, repo URL, server link, session link. |
+| `allow_rules` | `scope?`, `project?`, `rules?`, `remember?` | Rules added to the folder's local settings or the user settings; takes effect in running sessions. |
 | `pin_project` | `project`, `pinned` | The pinned list. |
 
 The same actions are available over HTTP on `127.0.0.1:7777` (`/api/status`, `/api/projects`,
 `/api/sessions`, `/api/projects/:slug/server`, `/api/projects/:slug/sessions`, `/api/sessions/:id`,
-`/api/projects/:slug/pin`, `/api/jobs/:id`, `/api/debug`).
+`/api/projects/:slug/pin`, `/api/permissions`, `/api/jobs/:id`, `/api/debug`).
 
 ## Operations
 

@@ -444,6 +444,11 @@ Changed 2026-10-13 after real use: `create_project` with a prompt now starts onl
 session, not the folder server as well. The server's pre-created idle session had shown up as a
 second "CCA <project>" entry next to the working one. `start_server` adds the server later.
 
+Added 2026-10-14: permission allow rules. `allowRules` (default `Bash(git push:*)`) are written
+to `.claude/settings.local.json` of every folder CCA starts a server or session in, and the
+`allow_rules` tool adds rules to a project or to `~/.claude/settings.json`. Claude Code reloads
+settings files live, so this also reaches sessions already running.
+
 Notes:
 
 - The prompt is passed via a file (`…/ClaudeCodeAnywhere/prompts/<tmux>.txt`) and

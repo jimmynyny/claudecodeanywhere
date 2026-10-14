@@ -7,6 +7,7 @@ import * as cc from './claudeCode.ts';
 import { log } from './log.ts';
 import { sleep } from './exec.ts';
 import { APP_DIR } from './config.ts';
+import * as permissions from './permissions.ts';
 
 export interface SessionView {
   pid: number;
@@ -276,6 +277,7 @@ export class ServerManager {
       if (await tmux.hasSession(tmuxSession)) await tmux.killSession(tmuxSession); // stale shell, no server in it
       const trust = cc.ensureTrusted(folder);
       if (trust !== 'already') log(trust === 'recorded' ? 'info' : 'warn', `workspace trust ${trust}`, { folder });
+      await permissions.applyToProject(folder, this.cfg.allowRules).catch((e) => log('warn', 'could not apply allow rules', e));
       await tmux.newSession(tmuxSession, folder);
 
       const cmd = ['claude', 'remote-control', '--name', shellQuote(name)];
@@ -399,6 +401,7 @@ export class ServerManager {
 
     const trust = cc.ensureTrusted(folder);
     if (trust !== 'already') log(trust === 'recorded' ? 'info' : 'warn', `workspace trust ${trust}`, { folder });
+    await permissions.applyToProject(folder, this.cfg.allowRules).catch((e) => log('warn', 'could not apply allow rules', e));
 
     // The prompt goes through a file so quotes and newlines never touch the shell.
     const promptDir = path.join(APP_DIR, 'prompts');

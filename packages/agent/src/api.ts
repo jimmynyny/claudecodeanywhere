@@ -8,6 +8,8 @@ import { health } from './health.ts';
 import * as orchestrator from './orchestrator.ts';
 import * as tmux from './tmux.ts';
 import * as cc from './claudeCode.ts';
+import * as permissions from './permissions.ts';
+import { saveConfig } from './config.ts';
 import { log } from './log.ts';
 
 export interface Deps {
@@ -64,6 +66,7 @@ export function createApi(d: Deps): http.Server {
         handoffSessions: snap.handoffSessions.length,
         sessions: snap.servers.reduce((n, s) => n + s.sessions.length, 0) + snap.handoffSessions.length + snap.standaloneSessions.length,
         pinned: d.cfg.pinned,
+        allowRules: d.cfg.allowRules,
       };
     }),
     compile('GET', '/api/config', async () => d.cfg),
@@ -125,6 +128,29 @@ export function createApi(d: Deps): http.Server {
     compile('POST', '/api/projects/:slug/pin', async ({ params, body }) => {
       const folder = d.projects.resolve(decodeURIComponent(params.slug!));
       return { pinned: d.projects.setPinned(folder, bool(body.pinned, true)) };
+    }),
+    compile('GET', '/api/permissions', async ({ query }) => {
+      const project = query.get('project');
+      return {
+        defaultRules: d.cfg.allowRules,
+        userRules: permissions.userRules(),
+        projectRules: project ? await permissions.projectRules(d.projects.resolve(project, true)) : null,
+      };
+    }),
+    compile('POST', '/api/permissions', async ({ body }) => {
+      const scope = body.scope === 'user' ? 'user' : 'project';
+      const rules = body.rules === undefined ? d.cfg.allowRules : permissions.validateRules(body.rules);
+      if (!rules.length) throw new ApiError(400, 'no rules given and no default rules configured');
+      if (bool(body.remember, false)) {
+        const set = new Set([...d.cfg.allowRules, ...rules]);
+        d.cfg.allowRules = [...set];
+        saveConfig(d.cfg);
+      }
+      if (scope === 'user') return { scope, ...permissions.applyToUser(rules), remembered: bool(body.remember, false), note: 'Applies to every Claude Code session on this Mac, running ones included.' };
+      const project = str(body.project);
+      if (!project) throw new ApiError(400, 'project is required for scope "project"');
+      const folder = d.projects.resolve(project, true);
+      return { scope, project, ...(await permissions.applyToProject(folder, rules)), remembered: bool(body.remember, false), note: 'Applies to every session in this folder, running ones included.' };
     }),
     compile('GET', '/api/jobs/:id', async ({ params }) => {
       const job = d.jobs.get(params.id!);

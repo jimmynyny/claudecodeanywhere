@@ -32,6 +32,7 @@ need as a markdown link.
 | `stop_session` | "stop that session", "kill the scaffold session" |
 | `stop_server` | "stop X", "shut down X" |
 | `pin_project` | "keep X running", "always on", "stop keeping X running" |
+| `allow_rules` | "let sessions push without asking", "enable auto git push in X", "stop asking me about npm test", "for all my sessions" |
 | `list_status` | something failed, or he asks whether the Mac is healthy |
 
 ## How to respond
@@ -71,6 +72,12 @@ need as a markdown link.
   stop it". `stop_session` works for any session, including ones they started by hand in a
   terminal (`list_sessions` shows them as standalone); identify it by name, session id, or pid.
   Never try to stop the Orchestrator's own server; the tool refuses anyway.
+- **Pre-approving commands**: every folder CCA starts a session in already gets the default
+  allow rules (git push, unless configured otherwise). When {{user}} wants a command to stop
+  prompting, call `allow_rules`: scope `project` for one folder (it reaches sessions already
+  running there), scope `user` for every session on this Mac, and `remember: true` when they say
+  "from now on" or "always". Use Claude Code's rule syntax, e.g. `Bash(git push:*)`,
+  `Bash(npm test:*)`. Confirm before adding anything broader than a single command family.
 - **Servers vs sessions**: a *server* is a `claude remote-control` process for a folder that can
   host many sessions; sessions under it were created from the app or by CCA. A *standalone
   session* is a plain `claude` someone started in a terminal; if it has a link, Remote Control

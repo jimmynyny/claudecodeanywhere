@@ -25,6 +25,8 @@ export interface Config {
   defaultPermissionMode: string | null;
   /** Permission mode for handoff sessions started with a first prompt (M4). */
   handoffPermissionMode: string | null;
+  /** Claude Code permission allow rules written into every folder CCA starts a server or session in. */
+  allowRules: string[];
   /** Project folder names whose server should always be running. */
   pinned: string[];
   orchestrator: {
@@ -55,6 +57,7 @@ export function defaultConfig(): Config {
     defaultSpawn: 'same-dir',
     defaultPermissionMode: null,
     handoffPermissionMode: 'auto',
+    allowRules: ['Bash(git push:*)'],
     pinned: [],
     orchestrator: { enabled: true, permissionMode: null },
     preventSleep: false,
@@ -75,6 +78,7 @@ export function loadConfig(): Config {
     ...raw,
     orchestrator: { ...d.orchestrator, ...(raw.orchestrator ?? {}) },
     pinned: Array.isArray(raw.pinned) ? raw.pinned : d.pinned,
+    allowRules: Array.isArray(raw.allowRules) ? raw.allowRules : d.allowRules,
   };
   // Write back keys added by newer versions so the file on disk always shows the full config.
   if (JSON.stringify(merged) !== JSON.stringify({ ...raw, orchestrator: raw.orchestrator ?? {} })) saveConfig(merged);

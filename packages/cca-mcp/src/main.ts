@@ -146,6 +146,21 @@ server.registerTool(
 );
 
 server.registerTool(
+  'allow_rules',
+  {
+    title: 'Pre-approve commands for sessions (permission allow rules)',
+    description: 'Adds Claude Code permission allow rules, in Claude Code\'s own syntax such as "Bash(git push:*)", so matching commands run without a prompt. scope "project" writes the project\'s .claude/settings.local.json and takes effect immediately in every session running in that folder; scope "user" writes ~/.claude/settings.json and applies to every session on this Mac, running or future. With no rules given, applies the configured defaults (git push by default). remember=true also adds the rules to the defaults applied to every folder CCA starts from now on. Call with no arguments beyond scope/project to see what is set via list_status.allowRules.',
+    inputSchema: {
+      scope: z.enum(['project', 'user']).optional().describe('"project" (default) for one folder, "user" for every session on this Mac'),
+      project: z.string().optional().describe('Project folder name; required for scope "project"'),
+      rules: z.array(z.string()).optional().describe('Rules like "Bash(git push:*)", "Bash(npm test:*)"; default: the configured defaults'),
+      remember: z.boolean().optional().describe('Also add these rules to the defaults for all future CCA sessions'),
+    },
+  },
+  ({ scope, project, rules, remember }) => wrap(() => call('POST', '/api/permissions', { scope, project, rules, remember })),
+);
+
+server.registerTool(
   'pin_project',
   {
     title: 'Pin or unpin a project',
