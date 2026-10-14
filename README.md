@@ -146,6 +146,7 @@ browser you are already in.
 | start a session in X / open X / resume X | Starts (or resumes) X's server and returns the folder link. |
 | new project X | Creates `<root>/X`, `git init -b main`, README, first commit, a private GitHub repo, pushes, starts the server. Say "public" or "no github" to change that. |
 | in X, do Y / new project X and build Y | Starts one handoff session that begins on Y right away and returns its link. For a new project, no folder server is started in this case, so you get exactly one new entry in your session list. |
+| move the X session to the CCA server | Resumes that session's conversation inside CCA's tmux server so it can use the login keychain (for Xcode signing). |
 | stop X / stop that session | Stops a server or a session (it confirms first). Works for servers and sessions you started by hand too, including a server in the root folder. The Orchestrator refuses to stop itself. |
 | keep X running / pin X | Marks X pinned so its server is always restarted, including after login. |
 | let sessions push without asking / enable auto git push in X / stop asking about npm test | Adds a permission allow rule for that folder (reaches running sessions) or, if you say "for all my sessions", for every session on the Mac. "From now on" also makes it a default for future CCA sessions. |
@@ -210,7 +211,10 @@ Two things can still get in the way:
   waits for a password. Turn both off on a machine that builds unattended.
 
 Servers you started by hand in your own tmux keep whatever session they were born in. To give one
-keychain access, stop it and let CCA start it: "start a session in X".
+keychain access, stop it and let CCA start it: "start a session in X". For a session you want to
+keep, say "move the X session to the CCA server": it is stopped and resumed with
+`claude --resume` inside CCA's tmux server, same conversation, same claude.ai link. Shell commands
+that were running in it are lost, so the Orchestrator confirms first if it is busy.
 
 ## Configuration
 
@@ -273,6 +277,7 @@ Logs are in `~/Library/Logs/ClaudeCodeAnywhere/agent.log` and `agent.err.log`.
 | `stop_server` | `project` | Stopped state and resume deadline. |
 | `start_session` | `project`, `prompt`, `name?`, `permission_mode?` | The handoff session, with its link. |
 | `stop_session` | `session` (name, id, pid, or tmux session) | Whether it was stopped; works for handoff, hosted, and standalone sessions. |
+| `move_session` | `session` | Stops a session and resumes its conversation inside CCA's tmux server, for keychain access. |
 | `create_project` | `name`, `github?`, `private?`, `description?`, `start?`, `prompt?` | Job steps, repo URL, server link, session link. |
 | `allow_rules` | `scope?`, `project?`, `rules?`, `remember?` | Rules added to the folder's local settings or the user settings; takes effect in running sessions. |
 | `pin_project` | `project`, `pinned` | The pinned list. |

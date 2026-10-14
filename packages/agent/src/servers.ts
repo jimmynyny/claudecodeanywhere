@@ -45,7 +45,10 @@ export interface ServerView {
 }
 
 export interface StartSessionOptions {
-  prompt: string;
+  /** First task. Required unless `resume` is given. */
+  prompt?: string;
+  /** Claude Code session id to resume instead of starting a new conversation. */
+  resume?: string;
   name?: string;
   permissionMode?: string | null;
 }
@@ -396,30 +399,33 @@ export class ServerManager {
    */
   async startSession(folderIn: string, opts: StartSessionOptions): Promise<HandoffSessionView> {
     const folder = path.resolve(folderIn);
-    const prompt = opts.prompt.trim();
-    if (!prompt) throw new Error('prompt is required');
+    const prompt = opts.prompt?.trim() ?? '';
+    if (!prompt && !opts.resume) throw new Error('prompt is required');
     const base = tmuxNameFor(folder);
     let n = 1;
     while (await tmux.hasSession(`${base}-s${n}`)) n++;
     const tmuxSession = `${base}-s${n}`;
     const target = tmux.sessionTarget(tmuxSession);
-    const name = ccaName(`${path.basename(folder)}: ${opts.name?.trim() || summarize(prompt)}`);
+    const name = ccaName(opts.name?.trim() || `${path.basename(folder)}: ${prompt ? summarize(prompt) : 'resumed'}`);
     const permissionMode = opts.permissionMode === undefined ? this.cfg.handoffPermissionMode : opts.permissionMode;
 
     const trust = cc.ensureTrusted(folder);
     if (trust !== 'already') log(trust === 'recorded' ? 'info' : 'warn', `workspace trust ${trust}`, { folder });
     await permissions.applyToProject(folder, this.cfg.allowRules).catch((e) => log('warn', 'could not apply allow rules', e));
 
-    // The prompt goes through a file so quotes and newlines never touch the shell.
-    const promptDir = path.join(APP_DIR, 'prompts');
-    fs.mkdirSync(promptDir, { recursive: true });
-    const promptFile = path.join(promptDir, `${tmuxSession}.txt`);
-    fs.writeFileSync(promptFile, prompt);
-
     await tmux.newSession(tmuxSession, folder);
-    const cmd = ['claude', '--remote-control', shellQuote(name)];
+    const cmd = ['claude'];
+    if (opts.resume) cmd.push('--resume', shellQuote(opts.resume));
+    cmd.push('--remote-control', shellQuote(name));
     if (permissionMode) cmd.push('--permission-mode', permissionMode);
-    cmd.push(`"$(cat ${shellQuote(promptFile)})"`);
+    if (prompt) {
+      // The prompt goes through a file so quotes and newlines never touch the shell.
+      const promptDir = path.join(APP_DIR, 'prompts');
+      fs.mkdirSync(promptDir, { recursive: true });
+      const promptFile = path.join(promptDir, `${tmuxSession}.txt`);
+      fs.writeFileSync(promptFile, prompt);
+      cmd.push(`"$(cat ${shellQuote(promptFile)})"`);
+    }
     log('info', 'starting handoff session', { folder, tmuxSession, name, permissionMode });
     await tmux.sendLiteral(target, cmd.join(' '));
     await tmux.sendKeys(target, ['Enter']);
@@ -492,6 +498,27 @@ export class ServerManager {
       return { stopped: true, name: standalone.name, note: 'Stopped (it was started by hand in a terminal, so that terminal now shows a prompt). Resume with `claude --resume` in its folder.' };
     }
     return { stopped: false, name: null, note: `No session matches "${id}". Use the session name, session id, or pid from list_sessions.` };
+  }
+
+  /**
+   * Move a session onto CCA's tmux server (GUI session, keychain access) keeping its conversation:
+   * stop it, then `claude --resume <id>` in the same folder with Remote Control on. Running shell
+   * commands in the old session are lost; the transcript and the claude.ai session are not.
+   */
+  async moveSession(id: string): Promise<HandoffSessionView> {
+    const snap = await this.snapshot();
+    const match = (x: SessionView) => x.name === id || x.sessionId === id || String(x.pid) === id;
+    const handoff = snap.handoffSessions.find((v) => v.tmuxSession === id || v.name === id || v.sessions.some(match));
+    const hosted = handoff ? undefined : snap.servers.flatMap((v) => v.sessions).find(match);
+    const standalone = handoff || hosted ? undefined : snap.standaloneSessions.find(match);
+    const session = handoff?.sessions[0] ?? hosted ?? standalone;
+    if (!session) throw new Error(`No session matches "${id}"`);
+    if (handoff && handoff.tmuxSocket === tmux.CCA_SOCKET) throw new Error(`${handoff.name} is already on the CCA tmux server`);
+    const folder = session.cwd;
+    const name = handoff?.name ?? session.name;
+    const permissionMode = handoff ? (this.cfg.handoffPermissionMode ?? null) : null;
+    await this.stopSession(session.sessionId);
+    return this.startSession(folder, { resume: session.sessionId, name, permissionMode });
   }
 
   private async waitExit(pid: number | null): Promise<void> {

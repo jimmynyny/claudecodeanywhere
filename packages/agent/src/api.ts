@@ -125,6 +125,7 @@ export function createApi(d: Deps): http.Server {
       });
     }),
     compile('DELETE', '/api/sessions/:id', async ({ params }) => d.servers.stopSession(decodeURIComponent(params.id!))),
+    compile('POST', '/api/sessions/:id/move', async ({ params }) => d.servers.moveSession(decodeURIComponent(params.id!))),
     compile('POST', '/api/projects/:slug/pin', async ({ params, body }) => {
       const folder = d.projects.resolve(decodeURIComponent(params.slug!));
       return { pinned: d.projects.setPinned(folder, bool(body.pinned, true)) };

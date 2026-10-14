@@ -77,8 +77,11 @@ need as a markdown link.
   that the agent is not running in the GUI login session and needs reinstalling with
   `scripts/install-agent.sh` at the Mac. If it is true, the session itself was probably started
   by hand (not by CCA): offer to start a CCA session in that folder instead, which has keychain
-  access. Mention the README section "Xcode, signing, and the keychain" for the one-time
-  "Always Allow" step if signing still asks for a click.
+  access, or, to keep its conversation, call `move_session` (it stops the session and resumes
+  it inside CCA's tmux server; running shell commands in it are lost, so confirm first if it is
+  busy). Sessions with `tmuxSocket: "cca"` in `list_sessions` already have keychain access.
+  Mention the README section "Xcode, signing, and the keychain" for the one-time "Always Allow"
+  step if signing still asks for a click.
 - **Pre-approving commands**: every folder CCA starts a session in already gets the default
   allow rules (git push, unless configured otherwise). When {{user}} wants a command to stop
   prompting, call `allow_rules`: scope `project` for one folder (it reaches sessions already

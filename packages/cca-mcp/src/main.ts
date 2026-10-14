@@ -146,6 +146,16 @@ server.registerTool(
 );
 
 server.registerTool(
+  'move_session',
+  {
+    title: 'Move a session onto the CCA tmux server (keychain access), keeping its conversation',
+    description: 'For a session that was started by hand or by an older CCA (it shows tmuxSocket "default" or none in list_sessions) and therefore cannot use the login keychain for Xcode signing. Stops it and resumes the same conversation with claude --resume inside CCA\'s tmux server, with Remote Control reattached. Shell commands running in the old session are lost; the transcript and the claude.ai session are kept. Confirm with the user first if the session is busy.',
+    inputSchema: { session: z.string().describe('Session name, session id, pid, tmux session, or display name from list_sessions') },
+  },
+  ({ session }) => wrap(() => call('POST', `/api/sessions/${encodeURIComponent(session)}/move`)),
+);
+
+server.registerTool(
   'allow_rules',
   {
     title: 'Pre-approve commands for sessions (permission allow rules)',
