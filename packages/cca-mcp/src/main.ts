@@ -106,7 +106,7 @@ server.registerTool(
   'create_project',
   {
     title: 'Create a new project folder, git repo, GitHub repo, and server',
-    description: 'Creates <root>/<name>, runs git init on branch main with a README and first commit, optionally creates a GitHub repo (private by default) and pushes, then starts either a Remote Control server (no prompt) or one handoff session (with prompt) and returns the link. Takes 5 to 20 seconds. On failure the response names the step that failed; the folder is left in place so the problem can be fixed and start_server used afterwards.',
+    description: 'ONE call does everything: creates <root>/<name>, runs git init on branch main with a README and first commit, optionally creates a GitHub repo (private by default) and pushes, then starts either a Remote Control server (no prompt) or one handoff session (with prompt) and returns the link. When the user also says what to build, pass it as `prompt` here; do NOT call create_project and then start_session, that produces two entries in the user\'s session list. Takes 5 to 20 seconds. On failure the response names the step that failed; the folder is left in place so the problem can be fixed and start_server used afterwards.',
     inputSchema: {
       name: z.string().describe('Folder and repo name: letters, digits, dots, dashes, underscores'),
       github: z.boolean().optional().describe('Create a GitHub repo and push (default true)'),

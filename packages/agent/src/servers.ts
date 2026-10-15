@@ -49,7 +49,9 @@ export interface StartSessionOptions {
   prompt?: string;
   /** Claude Code session id to resume instead of starting a new conversation. */
   resume?: string;
+  /** Session title. Normally prefixed with the project name; `fullName` uses it verbatim. */
   name?: string;
+  fullName?: boolean;
   permissionMode?: string | null;
 }
 
@@ -406,12 +408,15 @@ export class ServerManager {
     while (await tmux.hasSession(`${base}-s${n}`)) n++;
     const tmuxSession = `${base}-s${n}`;
     const target = tmux.sessionTarget(tmuxSession);
-    const name = ccaName(opts.name?.trim() || `${path.basename(folder)}: ${prompt ? summarize(prompt) : 'resumed'}`);
+    const name = opts.fullName && opts.name
+      ? ccaName(opts.name.trim())
+      : ccaName(`${path.basename(folder)}: ${opts.name?.trim() || (prompt ? summarize(prompt) : 'resumed')}`);
     const permissionMode = opts.permissionMode === undefined ? this.cfg.handoffPermissionMode : opts.permissionMode;
 
     const trust = cc.ensureTrusted(folder);
     if (trust !== 'already') log(trust === 'recorded' ? 'info' : 'warn', `workspace trust ${trust}`, { folder });
     await permissions.applyToProject(folder, this.cfg.allowRules).catch((e) => log('warn', 'could not apply allow rules', e));
+    await this.dropSpareServer(folder);
 
     await tmux.newSession(tmuxSession, folder);
     const cmd = ['claude'];
@@ -501,6 +506,23 @@ export class ServerManager {
   }
 
   /**
+   * A task session is about to start in this folder. If the agent started a folder server here
+   * moments ago and nothing has used it (its only session is the idle one Claude Code pre-creates),
+   * it is a leftover from a two-step "create project, then start session" request and would show
+   * up as a second, idle entry in the user's list. Stop it; `start_server` brings it back any time.
+   */
+  private async dropSpareServer(folder: string): Promise<void> {
+    const s = await this.running(folder);
+    if (!s || s.origin !== 'agent' || !s.startedAt) return;
+    const ageMs = Date.now() - s.startedAt;
+    const spare = s.sessions.length <= 1 && s.sessions.every((x) => x.status === 'idle');
+    if (ageMs < 10 * 60_000 && spare) {
+      log('info', 'stopping spare folder server before starting a task session', { folder, ageSec: Math.round(ageMs / 1000) });
+      await this.stop(folder);
+    }
+  }
+
+  /**
    * Move a session onto CCA's tmux server (GUI session, keychain access) keeping its conversation:
    * stop it, then `claude --resume <id>` in the same folder with Remote Control on. Running shell
    * commands in the old session are lost; the transcript and the claude.ai session are not.
@@ -518,7 +540,7 @@ export class ServerManager {
     const name = handoff?.name ?? session.name;
     const permissionMode = handoff ? (this.cfg.handoffPermissionMode ?? null) : null;
     await this.stopSession(session.sessionId);
-    return this.startSession(folder, { resume: session.sessionId, name, permissionMode });
+    return this.startSession(folder, { resume: session.sessionId, name, fullName: true, permissionMode });
   }
 
   private async waitExit(pid: number | null): Promise<void> {
