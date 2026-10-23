@@ -94,11 +94,13 @@ export class Projects {
       return { folder: this.resolve(input), cloned: null };
     } catch (e) {
       if (!allowClone || !(e instanceof ApiError) || e.status !== 404 || path.isAbsolute(input)) throw e;
+      const gh = await github.ghStatus();
+      if (gh.problem) throw new ApiError(404, `No project folder named "${input}" under ${this.root}, and GitHub cannot be checked: ${gh.problem}`);
       const repo = await github.findRepo(input).catch((err) => {
         log('warn', 'GitHub lookup failed', err);
         return null;
       });
-      if (!repo) throw new ApiError(404, `No project folder named "${input}" under ${this.root}, and no GitHub repository by that name is reachable with gh. Try list_repos to see what is available.`);
+      if (!repo) throw new ApiError(404, `No project folder named "${input}" under ${this.root}, and no GitHub repository by that name is reachable as ${gh.login}. Try list_repos to see what is available.`);
       const folder = await github.cloneRepo(repo, this.root);
       this.gitCache.delete(folder);
       return { folder, cloned: repo };
@@ -175,6 +177,9 @@ export class Projects {
     const folder = path.join(this.root, name);
     if (fs.existsSync(folder)) throw new ApiError(409, `A folder named "${name}" already exists under ${this.root}`);
     if (input.github) {
+      // Verified before anything is created on disk, so a missing gh never leaves a half-made project.
+      const gh = await github.ghStatus();
+      if (gh.problem) throw new ApiError(503, `Cannot create a GitHub repository: ${gh.problem} (Or pass github: false to create the project locally only.)`);
       const existing = await github.findRepo(name).catch(() => null);
       if (existing) throw new ApiError(409, `A GitHub repository ${existing.fullName} already exists. Use clone_repo (or start_server, which clones on demand) instead of creating a new one.`);
     }

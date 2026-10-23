@@ -104,11 +104,13 @@ export function createApi(d: Deps): http.Server {
       }
     }),
     compile('GET', '/api/repos', async ({ query }) => {
+      await github.requireGh();
       const remotes = await d.projects.localRemotes();
       const repos = await github.listRepos(d.projects.root, remotes, query.get('query') ?? undefined);
       return { login: await github.ghLogin(), count: repos.length, repos: repos.map((r) => ({ ...r, cloneUrl: undefined, sshUrl: undefined })) };
     }),
     compile('POST', '/api/repos/:name/clone', async ({ params, body }) => {
+      await github.requireGh();
       const repo = await github.findRepo(decodeURIComponent(params.name!));
       if (!repo) throw new ApiError(404, `No reachable GitHub repository named "${params.name}"`);
       const folder = await github.cloneRepo(repo, d.projects.root, str(body.name) ?? undefined);
@@ -194,7 +196,7 @@ export function createApi(d: Deps): http.Server {
       const result = await route.handler({ params, query: url.searchParams, body });
       send(200, result ?? {});
     } catch (e) {
-      const status = e instanceof ApiError ? e.status : 500;
+      const status = e instanceof ApiError || e instanceof github.GitHubUnavailable ? e.status : 500;
       const message = e instanceof Error ? e.message : String(e);
       if (status >= 500) log('error', `${method} ${url.pathname} failed`, e);
       send(status, { error: message });

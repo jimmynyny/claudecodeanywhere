@@ -92,7 +92,9 @@ A Mac. The installer puts everything else in place:
 
 - Homebrew, Node 22.18+, tmux, gh, and Claude Code (`claude-code@latest` cask), all via Homebrew
 - A claude.ai login with a Pro or Max plan (Remote Control does not work with API keys)
-- A GitHub login for `gh`, if you want repos created for you (optional)
+- A GitHub login for `gh`, if you want repos created or cloned for you (optional). Every GitHub
+  action first checks that `gh` is installed and logged in, and refuses with instructions
+  otherwise; local-only projects work without it.
 - Remote Control accepted once on the Mac (Claude Code asks the first time)
 - The Mac set to never sleep on AC power
 

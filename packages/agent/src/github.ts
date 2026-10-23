@@ -27,6 +27,53 @@ export interface Repo {
 const CACHE_MS = 60_000;
 let cache: { at: number; repos: Repo[] } | null = null;
 
+export interface GhStatus {
+  installed: boolean;
+  loggedIn: boolean;
+  login: string | null;
+  /** Human instruction when something is missing; null when ready. */
+  problem: string | null;
+}
+
+let ghCache: { at: number; status: GhStatus } | null = null;
+const GH_CACHE_MS = 30_000;
+
+/** Is the GitHub CLI installed and authenticated on this Mac? Cached briefly. */
+export async function ghStatus(force = false): Promise<GhStatus> {
+  if (!force && ghCache && Date.now() - ghCache.at < GH_CACHE_MS) return ghCache.status;
+  const ver = await run('gh', ['--version']);
+  let status: GhStatus;
+  if (ver.code === 127 || /ENOENT|not found/i.test(ver.stderr)) {
+    status = { installed: false, loggedIn: false, login: null, problem: 'The GitHub CLI (gh) is not installed on this Mac. Install it with `brew install gh`, then `gh auth login -h github.com -p ssh -w`, or rerun ./install.sh.' };
+  } else {
+    const auth = await run('gh', ['auth', 'status']);
+    if (auth.code !== 0) {
+      status = { installed: true, loggedIn: false, login: null, problem: 'gh is installed but not logged in on this Mac. Run `gh auth login -h github.com -p ssh -w` in a terminal there (it opens a browser once), or rerun ./install.sh.' };
+    } else {
+      const login = await run('gh', ['api', 'user', '--jq', '.login']);
+      status = login.code === 0
+        ? { installed: true, loggedIn: true, login: login.stdout.trim(), problem: null }
+        : { installed: true, loggedIn: false, login: null, problem: `gh is logged in but GitHub rejected the token (${(login.stderr || login.stdout).trim().split('\n')[0]}). Re-run \`gh auth login\` on the Mac.` };
+    }
+  }
+  ghCache = { at: Date.now(), status };
+  return status;
+}
+
+export class GitHubUnavailable extends Error {
+  status = 503;
+  constructor(problem: string) {
+    super(problem);
+  }
+}
+
+/** Throw unless gh is installed and authenticated. Call before any GitHub operation. */
+export async function requireGh(): Promise<GhStatus> {
+  const s = await ghStatus();
+  if (s.problem) throw new GitHubUnavailable(s.problem);
+  return s;
+}
+
 interface ApiRepo {
   full_name: string;
   name: string;
@@ -42,11 +89,11 @@ interface ApiRepo {
 }
 
 export async function ghLogin(): Promise<string | null> {
-  const r = await run('gh', ['api', 'user', '--jq', '.login']);
-  return r.code === 0 ? r.stdout.trim() : null;
+  return (await ghStatus()).login;
 }
 
 async function fetchRepos(): Promise<Repo[]> {
+  await requireGh();
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.repos;
   const r = await run('gh', ['api', '--paginate', 'user/repos?per_page=100&affiliation=owner,collaborator,organization_member&sort=pushed'], { timeoutMs: 60_000 });
   if (r.code !== 0) throw new Error(`gh could not list repositories: ${(r.stderr || r.stdout).trim().split('\n').slice(-2).join(' ')}`);
@@ -111,6 +158,7 @@ export async function findRepo(nameOrFullName: string): Promise<Repo | null> {
 
 /** Clone a repo into <root>/<dirName or repo name>. Returns the folder. */
 export async function cloneRepo(repo: Repo, root: string, dirName?: string): Promise<string> {
+  await requireGh();
   const folder = path.join(root, dirName?.trim() || repo.name);
   if (fs.existsSync(folder)) throw new Error(`Folder already exists: ${folder}`);
   log('info', 'cloning repository', { repo: repo.fullName, folder });

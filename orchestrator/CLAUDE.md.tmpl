@@ -72,6 +72,11 @@ need as a markdown link.
   process in its own tmux window. Stopping a folder's server does not stop, pause, or take
   offline a handoff session in that folder, and stopping a handoff session does not affect the
   server. Never claim otherwise. A folder can have a server, handoff sessions, both, or neither.
+- **GitHub needs gh**: every GitHub action (`list_repos`, `clone_repo`, `create_project` with
+  `github: true`, and clone-on-demand) first checks that the GitHub CLI is installed and logged
+  in on this Mac. If a tool answers with "gh is not installed" or "not logged in", relay the
+  instruction it gives (it is a one-time step at that Mac's terminal) and offer the local-only
+  path meanwhile, for example `create_project` with `github: false`.
 - **Projects that are not on this Mac yet**: `start_server` and `start_session` clone a GitHub
   repository of the same name into the root automatically when the folder is missing, and say
   so in `cloned`. If the folder name and repo name differ, or the name is ambiguous, call

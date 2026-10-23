@@ -5,6 +5,7 @@ import * as cc from './claudeCode.ts';
 import type { Supervisor } from './supervisor.ts';
 import { lastListPanes } from './tmux.ts';
 import * as tmux from './tmux.ts';
+import * as github from './github.ts';
 
 /** The keychain probe spawns a tmux pane, so cache it. */
 let keychainProbe: { at: number; ok: boolean; output: string } | null = null;
@@ -31,6 +32,7 @@ export interface Health {
   claudeVersion: string | null;
   login: cc.AuthStatus;
   ghOk: boolean;
+  gh: github.GhStatus;
   tmuxOk: boolean;
   tmuxPanes: typeof lastListPanes;
   rootDir: string;
@@ -58,6 +60,7 @@ export async function health(cfg: Config, supervisor: Supervisor): Promise<Healt
   ]);
   const keychainOk = kc.code === 0;
   const tk = await tmuxKeychain();
+  const ghs = await github.ghStatus();
   const idm = /(\d+) valid identities found/.exec(ids.stdout);
   const codesigningIdentities = idm ? Number(idm[1]) : null;
 
@@ -71,7 +74,7 @@ export async function health(cfg: Config, supervisor: Supervisor): Promise<Healt
 
   const warnings: string[] = [];
   if (!login.loggedIn) warnings.push('Claude Code is not logged in on this Mac. Someone must run `claude auth login` in a terminal there; Remote Control cannot start until then.');
-  if (gh.code !== 0) warnings.push('gh is not authenticated on this Mac, so creating GitHub repos will fail. Run `gh auth login` there.');
+  if (ghs.problem) warnings.push(`GitHub is unavailable: ${ghs.problem}`);
   if (tmuxV.code !== 0) warnings.push('tmux is not installed; the agent cannot start servers.');
   if (!rootExists) warnings.push(`Root folder ${cfg.rootDir} does not exist.`);
   if (sleepMinutesOnAC !== null && sleepMinutesOnAC > 0) warnings.push(`This Mac is set to sleep after ${sleepMinutesOnAC} minutes on AC power; sessions will go offline when it does.`);
@@ -85,7 +88,8 @@ export async function health(cfg: Config, supervisor: Supervisor): Promise<Healt
     agentUptimeSec: Math.round(process.uptime()),
     claudeVersion: version,
     login,
-    ghOk: gh.code === 0,
+    ghOk: !ghs.problem,
+    gh: ghs,
     tmuxOk: tmuxV.code === 0,
     tmuxPanes: { ...lastListPanes },
     rootDir: cfg.rootDir,

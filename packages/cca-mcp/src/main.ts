@@ -70,7 +70,7 @@ server.registerTool(
   'list_repos',
   {
     title: 'List GitHub repositories this Mac can reach',
-    description: 'Every repository the Mac\'s gh login can access (owned, collaborator, organization), newest push first, with `local` set to the folder name under the root that already tracks it, or null when it is not cloned here. Use it when a project is not in list_projects, or when the user asks what repos exist. Optional query filters by name or description.',
+    description: 'Requires the GitHub CLI (gh) installed and logged in on this Mac; otherwise the error says what to do. Every repository the Mac\'s gh login can access (owned, collaborator, organization), newest push first, with `local` set to the folder name under the root that already tracks it, or null when it is not cloned here. Use it when a project is not in list_projects, or when the user asks what repos exist. Optional query filters by name or description.',
     inputSchema: { query: z.string().optional().describe('Case-insensitive substring of the repo name or description') },
   },
   ({ query }) => wrap(() => call('GET', `/api/repos${query ? `?query=${encodeURIComponent(query)}` : ''}`)),
