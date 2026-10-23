@@ -4,6 +4,8 @@ import { type Config, saveConfig } from './config.ts';
 import { run, runOk } from './exec.ts';
 import type { Job, Jobs } from './jobs.ts';
 import { type HandoffSessionView, type ServerManager, type ServerView, slugOf } from './servers.ts';
+import * as github from './github.ts';
+import { log } from './log.ts';
 
 export interface GitInfo {
   isGit: boolean;
@@ -67,6 +69,40 @@ export class Projects {
       throw new ApiError(404, `No project folder named "${input}" under ${root}`);
     }
     return candidate;
+  }
+
+  /** Folder names under the root with their git origin (null when not a git repo or no origin). */
+  async localRemotes(): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = fs.readdirSync(this.root, { withFileTypes: true });
+    } catch {
+      return out;
+    }
+    const names = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules').map((e) => e.name);
+    await Promise.all(names.map(async (n) => out.set(n, (await this.gitInfo(path.join(this.root, n))).remote)));
+    return out;
+  }
+
+  /**
+   * Like resolve(), but when the folder is missing and a GitHub repo with that name is reachable,
+   * clone it into the root first. Returns the folder and whether a clone happened.
+   */
+  async resolveOrClone(input: string, allowClone = true): Promise<{ folder: string; cloned: github.Repo | null }> {
+    try {
+      return { folder: this.resolve(input), cloned: null };
+    } catch (e) {
+      if (!allowClone || !(e instanceof ApiError) || e.status !== 404 || path.isAbsolute(input)) throw e;
+      const repo = await github.findRepo(input).catch((err) => {
+        log('warn', 'GitHub lookup failed', err);
+        return null;
+      });
+      if (!repo) throw new ApiError(404, `No project folder named "${input}" under ${this.root}, and no GitHub repository by that name is reachable with gh. Try list_repos to see what is available.`);
+      const folder = await github.cloneRepo(repo, this.root);
+      this.gitCache.delete(folder);
+      return { folder, cloned: repo };
+    }
   }
 
   async list(query?: string): Promise<ProjectView[]> {
@@ -138,6 +174,10 @@ export class Projects {
     }
     const folder = path.join(this.root, name);
     if (fs.existsSync(folder)) throw new ApiError(409, `A folder named "${name}" already exists under ${this.root}`);
+    if (input.github) {
+      const existing = await github.findRepo(name).catch(() => null);
+      if (existing) throw new ApiError(409, `A GitHub repository ${existing.fullName} already exists. Use clone_repo (or start_server, which clones on demand) instead of creating a new one.`);
+    }
 
     await jobs.step(job, 'Create folder', async () => fs.mkdirSync(folder));
     await jobs.step(job, 'git init', () => runOk('git', ['init', '-b', 'main'], { cwd: folder }));
@@ -156,6 +196,7 @@ export class Projects {
         const args = ['repo', 'create', `${owner}/${name}`, input.private ? '--private' : '--public', '--source', folder, '--remote', 'origin', '--push'];
         if (input.description) args.push('--description', input.description);
         await runOk('gh', args, { cwd: folder, timeoutMs: 120_000 });
+        github.invalidateRepoCache();
         return `https://github.com/${owner}/${name}`;
       });
       this.gitCache.delete(folder);

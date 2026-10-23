@@ -457,6 +457,11 @@ is not allowed"; unlocking in SSH does not carry over. Verified: inside a server
 agent migrates its own servers off the default socket automatically; hand-started ones are left
 alone. `list_status` now reports `keychainOk` and the count of code-signing identities.
 
+Added 2026-10-23: GitHub awareness for multi-Mac use. `list_repos` (REST via `gh api`, since
+fine-grained tokens reject some GraphQL fields) shows every reachable repository with the local
+folder that tracks it; `clone_repo` clones into the root; `start_server` and `start_session`
+clone on demand when a project folder is missing. Session names now end with the machine name.
+
 Notes:
 
 - The prompt is passed via a file (`…/ClaudeCodeAnywhere/prompts/<tmux>.txt`) and

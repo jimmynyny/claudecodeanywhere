@@ -120,7 +120,10 @@ link. Rerunning it is safe; every step is skipped once done.
 
 Each Mac gets its own agent and its own Orchestrator, named `CCA Orchestrator (<machine name>)`,
 so with two Macs you see two Orchestrators in your session list and talk to whichever machine
-you want. They do not need to know about each other.
+you want. They do not need to know about each other. Give each Mac its own projects root (never
+a folder synced between them by Dropbox or iCloud; two machines editing one working tree
+corrupts git). Code moves between Macs through GitHub: ask either Orchestrator for a session in
+a project it does not have yet and it clones the repository first.
 
 What the installer sets up:
 
@@ -144,6 +147,9 @@ browser you are already in.
 | - | - |
 | what's running / anything waiting on me | Lists servers and sessions with idle, busy, or waiting state and links; waiting items first. |
 | list my projects / which project | Numbered list of recent project folders; answer with a number or a name. |
+| what repos do I have / is X on GitHub | Lists every repository your `gh` login can reach, marking which are already cloned here. |
+| start a session in X (when X is only on GitHub) | Clones the repository into the root first, then proceeds. This is how a second Mac picks up a project. |
+| clone X here | Clones without starting anything. |
 | start a session in X / open X / resume X | Starts (or resumes) X's server and returns the folder link. |
 | new project X | Creates `<root>/X`, `git init -b main`, README, first commit, a private GitHub repo, pushes, starts the server. Say "public" or "no github" to change that. |
 | in X, do Y / new project X and build Y | Starts one handoff session that begins on Y right away and returns its link. For a new project, no folder server is started in this case, so you get exactly one new entry in your session list. |
@@ -273,8 +279,10 @@ Logs are in `~/Library/Logs/ClaudeCodeAnywhere/agent.log` and `agent.err.log`.
 | - | - | - |
 | `list_status` | | Machine health, warnings, Orchestrator link, counts. |
 | `list_projects` | `query?` | Folders under the root with git branch, remote, last commit, pinned flag, server state. |
+| `list_repos` | `query?` | GitHub repositories reachable by `gh`, each with the local folder that tracks it or null. |
+| `clone_repo` | `repo`, `name?` | Clones a reachable repository into the root. |
 | `list_sessions` | | Three lists: servers (with the sessions they host), handoff sessions (independent single sessions CCA started with a task), standalone sessions. |
-| `start_server` | `project`, `name?`, `spawn?`, `permission_mode?` | The server, with its folder link. |
+| `start_server` | `project`, `name?`, `spawn?`, `permission_mode?` | The server, with its folder link. Clones the repo first if the folder is missing. |
 | `stop_server` | `project` | Stopped state and resume deadline. |
 | `start_session` | `project`, `prompt`, `name?`, `permission_mode?` | The handoff session, with its link. |
 | `stop_session` | `session` (name, id, pid, or tmux session) | Whether it was stopped; works for handoff, hosted, and standalone sessions. |
@@ -285,7 +293,7 @@ Logs are in `~/Library/Logs/ClaudeCodeAnywhere/agent.log` and `agent.err.log`.
 
 The same actions are available over HTTP on `127.0.0.1:7777` (`/api/status`, `/api/projects`,
 `/api/sessions`, `/api/projects/:slug/server`, `/api/projects/:slug/sessions`, `/api/sessions/:id`,
-`/api/projects/:slug/pin`, `/api/permissions`, `/api/jobs/:id`, `/api/debug`).
+`/api/projects/:slug/pin`, `/api/permissions`, `/api/repos`, `/api/repos/:name/clone`, `/api/jobs/:id`, `/api/debug`).
 
 ## Operations
 

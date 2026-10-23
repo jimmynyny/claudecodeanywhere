@@ -67,6 +67,26 @@ server.registerTool(
 );
 
 server.registerTool(
+  'list_repos',
+  {
+    title: 'List GitHub repositories this Mac can reach',
+    description: 'Every repository the Mac\'s gh login can access (owned, collaborator, organization), newest push first, with `local` set to the folder name under the root that already tracks it, or null when it is not cloned here. Use it when a project is not in list_projects, or when the user asks what repos exist. Optional query filters by name or description.',
+    inputSchema: { query: z.string().optional().describe('Case-insensitive substring of the repo name or description') },
+  },
+  ({ query }) => wrap(() => call('GET', `/api/repos${query ? `?query=${encodeURIComponent(query)}` : ''}`)),
+);
+
+server.registerTool(
+  'clone_repo',
+  {
+    title: 'Clone a GitHub repository into the projects root',
+    description: 'Clones a reachable repository (by name or owner/name) into <root>/<name> so it can be worked on here. start_server and start_session already do this on demand when a project folder is missing, so call this only when the user wants the clone without starting anything, or wants a different folder name.',
+    inputSchema: { repo: z.string().describe('Repository name or owner/name'), name: z.string().optional().describe('Folder name under the root (default: the repo name)') },
+  },
+  ({ repo, name }) => wrap(() => call('POST', `/api/repos/${encodeURIComponent(repo)}/clone`, { name })),
+);
+
+server.registerTool(
   'list_sessions',
   {
     title: 'List Remote Control servers and sessions',
@@ -80,7 +100,7 @@ server.registerTool(
   'start_server',
   {
     title: 'Start or resume a Remote Control server for a project',
-    description: 'Starts `claude remote-control` in the project folder (inside tmux) and returns its link. Idempotent: if a server is already running for that folder, returns it. If one was stopped less than 4 hours ago, its sessions are resumed. Open the returned link in the Claude app or claude.ai/code to create or pick a session there.',
+    description: 'Starts `claude remote-control` in the project folder (inside tmux) and returns its link. Idempotent: if a server is already running for that folder, returns it. If one was stopped less than 4 hours ago, its sessions are resumed. If the folder does not exist but a GitHub repository with that name is reachable, it is cloned into the root first (the result then has `cloned`). Open the returned link in the Claude app or claude.ai/code to create or pick a session there.',
     inputSchema: {
       project: z.string().describe('Project folder name under the root (or its absolute path)'),
       name: z.string().optional().describe('Display name for the session list; defaults to the folder name'),
@@ -123,7 +143,7 @@ server.registerTool(
   'start_session',
   {
     title: 'Start a session in a project with a first prompt (handoff)',
-    description: 'Starts one interactive Claude Code session in the project folder, connected to Remote Control, and gives it the prompt so it starts working right away. Returns the session link. Use this when the user wants something done, not just a server. Permission mode defaults to the configured handoff mode (auto).',
+    description: 'Starts one interactive Claude Code session in the project folder, connected to Remote Control, and gives it the prompt so it starts working right away. Returns the session link. If the folder does not exist but a GitHub repository with that name is reachable, it is cloned into the root first (the result then has `cloned`). Use this when the user wants something done, not just a server. Permission mode defaults to the configured handoff mode (auto).',
     inputSchema: {
       project: z.string().describe('Project folder name under the root'),
       prompt: z.string().describe('The task, written as you would brief a capable engineer: what to build or do, and any constraints'),

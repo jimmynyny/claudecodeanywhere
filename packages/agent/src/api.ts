@@ -1,4 +1,5 @@
 import http from 'node:http';
+import path from 'node:path';
 import type { Config } from './config.ts';
 import type { ServerManager } from './servers.ts';
 import { ApiError, type Projects } from './projects.ts';
@@ -9,6 +10,7 @@ import * as orchestrator from './orchestrator.ts';
 import * as tmux from './tmux.ts';
 import * as cc from './claudeCode.ts';
 import * as permissions from './permissions.ts';
+import * as github from './github.ts';
 import { saveConfig } from './config.ts';
 import { log } from './log.ts';
 
@@ -101,13 +103,25 @@ export function createApi(d: Deps): http.Server {
         throw new ApiError(status, `${job.error} (job ${job.id}: ${job.steps.map((s) => `${s.name}=${s.status}`).join(', ')})`);
       }
     }),
+    compile('GET', '/api/repos', async ({ query }) => {
+      const remotes = await d.projects.localRemotes();
+      const repos = await github.listRepos(d.projects.root, remotes, query.get('query') ?? undefined);
+      return { login: await github.ghLogin(), count: repos.length, repos: repos.map((r) => ({ ...r, cloneUrl: undefined, sshUrl: undefined })) };
+    }),
+    compile('POST', '/api/repos/:name/clone', async ({ params, body }) => {
+      const repo = await github.findRepo(decodeURIComponent(params.name!));
+      if (!repo) throw new ApiError(404, `No reachable GitHub repository named "${params.name}"`);
+      const folder = await github.cloneRepo(repo, d.projects.root, str(body.name) ?? undefined);
+      return { repo: repo.fullName, folder, slug: path.basename(folder) };
+    }),
     compile('POST', '/api/projects/:slug/server', async ({ params, body }) => {
-      const folder = d.projects.resolve(decodeURIComponent(params.slug!));
-      return d.servers.start(folder, {
+      const { folder, cloned } = await d.projects.resolveOrClone(decodeURIComponent(params.slug!), bool(body.clone, true));
+      const view = await d.servers.start(folder, {
         name: str(body.name) ?? undefined,
         spawn: str(body.spawn) ?? undefined,
         permissionMode: body.permissionMode === undefined ? undefined : str(body.permissionMode),
       });
+      return cloned ? { ...view, cloned: cloned.fullName } : view;
     }),
     compile('DELETE', '/api/projects/:slug/server', async ({ params }) => {
       const folder = d.projects.resolve(decodeURIComponent(params.slug!), true);
@@ -115,14 +129,15 @@ export function createApi(d: Deps): http.Server {
       return d.servers.stop(folder);
     }),
     compile('POST', '/api/projects/:slug/sessions', async ({ params, body }) => {
-      const folder = d.projects.resolve(decodeURIComponent(params.slug!));
       const prompt = str(body.prompt);
       if (!prompt) throw new ApiError(400, 'prompt is required');
-      return d.servers.startSession(folder, {
+      const { folder, cloned } = await d.projects.resolveOrClone(decodeURIComponent(params.slug!), bool(body.clone, true));
+      const view = await d.servers.startSession(folder, {
         prompt,
         name: str(body.name) ?? undefined,
         permissionMode: body.permissionMode === undefined ? undefined : str(body.permissionMode),
       });
+      return cloned ? { ...view, cloned: cloned.fullName } : view;
     }),
     compile('DELETE', '/api/sessions/:id', async ({ params }) => d.servers.stopSession(decodeURIComponent(params.id!))),
     compile('POST', '/api/sessions/:id/move', async ({ params }) => d.servers.moveSession(decodeURIComponent(params.id!))),

@@ -26,6 +26,8 @@ need as a markdown link.
 | Tool | Use it when {{user}} says… |
 | - | - |
 | `list_sessions` | "what's running", "status", "anything waiting on me" |
+| `list_repos` | "what repos do I have", "is X on GitHub", or a project name that is not a local folder |
+| `clone_repo` | "clone X here", "check out X" (without starting a session) |
 | `list_projects` | "what projects do I have", "list my projects", "is there a folder called…", or any request to pick a project |
 | `start_server` | "start a session in X", "open X", "resume X", "work on X" |
 | `create_project` | "new project X", "make a repo for X", "create a folder X and put it on GitHub" (add `prompt` when they also say what to build) |
@@ -70,6 +72,12 @@ need as a markdown link.
   process in its own tmux window. Stopping a folder's server does not stop, pause, or take
   offline a handoff session in that folder, and stopping a handoff session does not affect the
   server. Never claim otherwise. A folder can have a server, handoff sessions, both, or neither.
+- **Projects that are not on this Mac yet**: `start_server` and `start_session` clone a GitHub
+  repository of the same name into the root automatically when the folder is missing, and say
+  so in `cloned`. If the folder name and repo name differ, or the name is ambiguous, call
+  `list_repos` (it marks which repos are already cloned as `local`) and use `clone_repo` with the
+  exact repo. Tell {{user}} when a clone happened. This is how a second Mac picks up work: the
+  code comes from GitHub, not from the other machine.
 - **Names**: project names are the folder names. If the name given does not match a folder,
   call `list_projects` with a query before guessing, and ask if still ambiguous.
 - **Stopping**: confirm before `stop_server` or `stop_session` unless {{user}} already said "yes,
