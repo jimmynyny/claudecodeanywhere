@@ -11,6 +11,7 @@ import * as tmux from './tmux.ts';
 import * as cc from './claudeCode.ts';
 import * as permissions from './permissions.ts';
 import * as github from './github.ts';
+import * as upgradeMod from './upgrade.ts';
 import { saveConfig } from './config.ts';
 import { log } from './log.ts';
 
@@ -69,9 +70,12 @@ export function createApi(d: Deps): http.Server {
         sessions: snap.servers.reduce((n, s) => n + s.sessions.length, 0) + snap.handoffSessions.length + snap.standaloneSessions.length,
         pinned: d.cfg.pinned,
         allowRules: d.cfg.allowRules,
+        version: await upgradeMod.versionInfo(),
       };
     }),
     compile('GET', '/api/config', async () => d.cfg),
+    compile('GET', '/api/version', async ({ query }) => upgradeMod.versionInfo(query.get('refresh') === '1')),
+    compile('POST', '/api/upgrade', async ({ body }) => upgradeMod.upgrade({ restart: bool(body.restart, true) })),
     compile('GET', '/api/debug', async () => {
       const [table, panes] = await Promise.all([cc.listProcesses(), tmux.listPanes()]);
       return {

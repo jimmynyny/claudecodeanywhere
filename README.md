@@ -292,6 +292,7 @@ Logs are in `~/Library/Logs/ClaudeCodeAnywhere/agent.log` and `agent.err.log`.
 | `create_project` | `name`, `github?`, `private?`, `description?`, `start?`, `prompt?` | Job steps, repo URL, server link, session link. |
 | `allow_rules` | `scope?`, `project?`, `rules?`, `remember?` | Rules added to the folder's local settings or the user settings; takes effect in running sessions. |
 | `pin_project` | `project`, `pinned` | The pinned list. |
+| `upgrade_cca` | `check_only?` | Pulls the latest CCA on this Mac and restarts the agent, or just reports the version. |
 
 The same actions are available over HTTP on `127.0.0.1:7777` (`/api/status`, `/api/projects`,
 `/api/sessions`, `/api/projects/:slug/server`, `/api/projects/:slug/sessions`, `/api/sessions/:id`,
@@ -313,12 +314,27 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.claudecodeanywhere.a
 tmux -L cca ls
 tmux -L cca attach -t cca-orchestrator      # Ctrl-b d to detach
 
-# update to a new version
-git pull && ./install.sh --yes      # reinstalls deps and restarts the agent; the Orchestrator reloads itself
+# upgrade to the latest version (see "Upgrading")
+scripts/upgrade.sh
 ```
 
 Restarting the agent never stops servers or sessions; they live in tmux. Stopping the
 Orchestrator's server (Ctrl-C in its tmux window) makes the agent resume it within 15 seconds.
+
+## Upgrading
+
+Every Mac upgrades itself from GitHub; nothing is pushed from one Mac to another.
+
+- **From your phone**: tell that Mac's Orchestrator "upgrade CCA". It pulls the latest code,
+  reinstalls dependencies if they changed, and restarts the agent. Running servers and sessions
+  are untouched. If the Orchestrator's own instructions or tools changed it restarts itself a few
+  seconds later and keeps its conversation. "Is CCA up to date?" reports the installed commit and
+  how many commits behind it is without changing anything.
+- **At the Mac**: `scripts/upgrade.sh` does the same thing from a terminal. `git pull &&
+  ./install.sh --yes` is equivalent and also re-checks prerequisites and the launchd job.
+- Upgrades refuse to run on a checkout with uncommitted local changes, which protects a machine
+  you develop CCA on; commit or stash first.
+- `list_status` includes a `version` block (commit, date, branch, commits behind origin).
 
 ## Troubleshooting
 
@@ -355,6 +371,7 @@ packages/cca-mcp/src/main.ts   the cca MCP server (stdio), forwards to the agent
 orchestrator/CLAUDE.md.tmpl    the Orchestrator's instructions; installed on every agent start
 install.sh                     one-shot installer: prerequisites, logins, config, launchd agent
 scripts/install-agent.sh       launchd install only (idempotent); uninstall-agent.sh
+scripts/upgrade.sh             pull the latest CCA and restart the agent
 scripts/dev/run.sh             foreground agent with auto-reload
 scripts/dev/spike-start-server.sh  the M0 proof-of-concept, kept for reference
 PLAN.md                        design, decisions, verified internals, milestone results

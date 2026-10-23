@@ -176,6 +176,16 @@ server.registerTool(
 );
 
 server.registerTool(
+  'upgrade_cca',
+  {
+    title: 'Upgrade CCA on this Mac',
+    description: 'Pulls the latest Claude Code Anywhere from GitHub into the checkout the agent runs from, reinstalls dependencies if they changed, and restarts the agent. Running servers and sessions are not touched; the Orchestrator reloads itself afterwards if its instructions or tools changed, keeping its conversation. With check_only=true, only reports the installed commit and how many commits behind it is. Refuses if the checkout has uncommitted local changes.',
+    inputSchema: { check_only: z.boolean().optional().describe('Report the version and whether an upgrade is available, without changing anything') },
+  },
+  ({ check_only }) => wrap(() => (check_only ? call('GET', '/api/version?refresh=1') : call('POST', '/api/upgrade', {}))),
+);
+
+server.registerTool(
   'allow_rules',
   {
     title: 'Pre-approve commands for sessions (permission allow rules)',

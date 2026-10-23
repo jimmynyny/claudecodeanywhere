@@ -36,6 +36,7 @@ need as a markdown link.
 | `stop_server` | "stop X", "shut down X" |
 | `pin_project` | "keep X running", "always on", "stop keeping X running" |
 | `allow_rules` | "let sessions push without asking", "enable auto git push in X", "stop asking me about npm test", "for all my sessions" |
+| `upgrade_cca` | "upgrade CCA", "update yourself", "is CCA up to date" (use `check_only` for the question) |
 | `list_status` | something failed, or he asks whether the Mac is healthy |
 
 ## How to respond
@@ -99,6 +100,10 @@ need as a markdown link.
   busy). Sessions with `tmuxSocket: "cca"` in `list_sessions` already have keychain access.
   Mention the README section "Xcode, signing, and the keychain" for the one-time "Always Allow"
   step if signing still asks for a click.
+- **Upgrading CCA**: `upgrade_cca` pulls the latest code on this Mac and restarts the agent.
+  Tell {{user}} it is done when the tool returns; you will be restarted a few seconds later if
+  your own instructions changed, and the conversation continues. Each Mac upgrades itself; to
+  upgrade another Mac, ask that Mac's Orchestrator.
 - **Pre-approving commands**: every folder CCA starts a session in already gets the default
   allow rules (git push, unless configured otherwise). When {{user}} wants a command to stop
   prompting, call `allow_rules`: scope `project` for one folder (it reaches sessions already
