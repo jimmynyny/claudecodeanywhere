@@ -95,10 +95,16 @@ export function tmuxNameFor(folder: string): string {
   return `cca-${slugOf(folder)}`;
 }
 
-/** Every session CCA starts is named "CCA …" so it is recognisable in the claude.ai session list. */
-export function ccaName(name: string): string {
-  const n = name.trim();
-  return /^CCA\s/.test(n) ? n : `CCA ${n}`;
+/**
+ * Every session CCA starts is named "CCA … (<machine>)" so it is recognisable in the claude.ai
+ * session list and you can see which Mac it runs on.
+ */
+export function ccaName(name: string, machine: string): string {
+  let n = name.trim();
+  if (!/^CCA\s/.test(n)) n = `CCA ${n}`;
+  const suffix = ` (${machine})`;
+  if (!n.endsWith(suffix)) n += suffix;
+  return n;
 }
 
 function toSessionView(s: cc.RegistrySession): SessionView {
@@ -277,7 +283,7 @@ export class ServerManager {
     this.starting.add(folder);
 
     const prev = this.state.servers[folder];
-    const name = ccaName(opts.name ?? prev?.name ?? path.basename(folder));
+    const name = ccaName(opts.name ?? prev?.name ?? path.basename(folder), this.cfg.machineName);
     const spawn = opts.spawn ?? prev?.spawn ?? this.cfg.defaultSpawn;
     const permissionMode = opts.permissionMode === undefined ? (prev?.permissionMode ?? this.cfg.defaultPermissionMode) : opts.permissionMode;
     const tmuxSession = tmuxNameFor(folder);
@@ -409,8 +415,8 @@ export class ServerManager {
     const tmuxSession = `${base}-s${n}`;
     const target = tmux.sessionTarget(tmuxSession);
     const name = opts.fullName && opts.name
-      ? ccaName(opts.name.trim())
-      : ccaName(`${path.basename(folder)}: ${opts.name?.trim() || (prompt ? summarize(prompt) : 'resumed')}`);
+      ? ccaName(opts.name.trim(), this.cfg.machineName)
+      : ccaName(`${path.basename(folder)}: ${opts.name?.trim() || (prompt ? summarize(prompt) : 'resumed')}`, this.cfg.machineName);
     const permissionMode = opts.permissionMode === undefined ? this.cfg.handoffPermissionMode : opts.permissionMode;
 
     const trust = cc.ensureTrusted(folder);

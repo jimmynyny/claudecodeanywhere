@@ -17,7 +17,8 @@ talk to it:
 The Orchestrator uses a small set of `cca` tools backed by a local agent. The agent starts
 `claude remote-control` servers and sessions inside tmux, creates folders and GitHub repos, hands
 a first task to a new session so it is already working when you open it, and keeps pinned servers
-alive across logins. Every session CCA starts is named `CCA …`.
+alive across logins. Every session CCA starts is named `CCA … (<machine>)`, so you can see which
+Mac it runs on.
 
 No cloud service, no VPN, no web UI of its own. The Claude app and claude.ai/code are the
 interface, and Anthropic's Remote Control channel is the transport: outbound-only from your Mac,
