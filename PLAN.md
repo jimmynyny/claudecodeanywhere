@@ -281,8 +281,9 @@ picker. Note: with FileVault on, nothing runs after a cold boot until someone un
 at the login screen; a LaunchDaemon would not change that. `sudo fdesetup authrestart` skips
 the unlock once for a planned restart.
 
-**M3 — Mini.** Install on the Mini. Verify cross-session messaging between the two
-Orchestrators so either one can relay "start a session in X" to the other machine.
+**M3 — Mini. Done 2026-10-23, see section 11.** Install on the Mini. Verify cross-session
+messaging between the two Orchestrators so either one can relay "start a session in X" to the
+other machine.
 
 **M4 — First-prompt handoff. Done 2026-10-13, see section 11.** `create_project` and the
 new `start_session` accept a first prompt. The agent starts an interactive session with
@@ -461,6 +462,13 @@ Added 2026-10-23: GitHub awareness for multi-Mac use. `list_repos` (REST via `gh
 fine-grained tokens reject some GraphQL fields) shows every reachable repository with the local
 folder that tracks it; `clone_repo` clones into the root; `start_server` and `start_session`
 clone on demand when a project folder is missing. Session names now end with the machine name.
+
+M3 done 2026-10-23: the Mini runs its own agent and `CCA Orchestrator (jMacMini)`; a relay
+request sent from the Studio over cross-session messaging was executed there and answered
+over the bridge. The Orchestrator's instructions now define the relay format and the handoff
+recipe (commit, push, HANDOFF.md, stop, start on the other Mac with a prompt to read it). Also
+added: `rename_session` (restart under a new title, conversation kept; verified same session id
+and link) and the dotted-folder fix (tmux names sanitized, sessions addressed by id).
 
 Notes:
 

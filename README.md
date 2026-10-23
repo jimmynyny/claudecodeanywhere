@@ -156,6 +156,9 @@ browser you are already in.
 | new project X | Creates `<root>/X`, `git init -b main`, README, first commit, a private GitHub repo, pushes, starts the server. Say "public" or "no github" to change that. |
 | in X, do Y / new project X and build Y | Starts one handoff session that begins on Y right away and returns its link. For a new project, no folder server is started in this case, so you get exactly one new entry in your session list. |
 | move the X session to the CCA server | Resumes that session's conversation inside CCA's tmux server so it can use the login keychain (for Xcode signing). |
+| on the Mini, start a session in X / ask the Studio to… | Relays the request to that Mac's Orchestrator over Claude's cross-machine messaging and passes back the result and link. |
+| move X to the Mini / pull X here | Hands the work over: the session commits, pushes, and writes HANDOFF.md; it is stopped; the other Mac clones if needed and starts a session that reads HANDOFF.md. The conversation itself does not transfer. |
+| rename that session to… / add the machine name to all sessions | Renames by restarting under the new title with the conversation kept; idle sessions can also be asked to `/rename` themselves. |
 | stop X / stop that session | Stops a server or a session (it confirms first). Works for servers and sessions you started by hand too, including a server in the root folder. The Orchestrator refuses to stop itself. |
 | keep X running / pin X | Marks X pinned so its server is always restarted, including after login. |
 | let sessions push without asking / enable auto git push in X / stop asking about npm test | Adds a permission allow rule for that folder (reaches running sessions) or, if you say "for all my sessions", for every session on the Mac. "From now on" also makes it a default for future CCA sessions. |
@@ -289,6 +292,7 @@ Logs are in `~/Library/Logs/ClaudeCodeAnywhere/agent.log` and `agent.err.log`.
 | `start_session` | `project`, `prompt`, `name?`, `permission_mode?` | The handoff session, with its link. |
 | `stop_session` | `session` (name, id, pid, or tmux session) | Whether it was stopped; works for handoff, hosted, and standalone sessions. |
 | `move_session` | `session` | Stops a session and resumes its conversation inside CCA's tmux server, for keychain access. |
+| `rename_session` | `session?`, `name?`, `machine_suffix?`, `force?` | Restart under a new title with the conversation kept; `machine_suffix` renames everything missing " (<machine>)". |
 | `create_project` | `name`, `github?`, `private?`, `description?`, `start?`, `prompt?` | Job steps, repo URL, server link, session link. |
 | `allow_rules` | `scope?`, `project?`, `rules?`, `remember?` | Rules added to the folder's local settings or the user settings; takes effect in running sessions. |
 | `pin_project` | `project`, `pinned` | The pinned list. |
@@ -321,6 +325,19 @@ scripts/upgrade.sh
 Restarting the agent never stops servers or sessions; they live in tmux. Stopping the
 Orchestrator's server (Ctrl-C in its tmux window) makes the agent resume it within 15 seconds.
 
+## Several Macs
+
+Each Mac runs its own agent and Orchestrator. The Orchestrators see each other in Claude Code's
+cross-session messaging as `CCA Orchestrator (<machine>)`, so you can talk to one and have it
+relay to another: "on the Mini, start a session in jfinances". The receiving Orchestrator does
+the work with its own tools and replies with the result and link. Nothing passes between the
+Macs over your network; the messages ride the same Remote Control channel as everything else.
+
+A session cannot be moved between Macs as a live process, but the work can: "move X to the
+Mini" makes the session commit, push, and write a `HANDOFF.md` with state and next steps, stops
+it, and has the other Mac clone the repository if needed and start a session that reads the
+note. Uncommitted work would be lost, so the Orchestrator asks before stopping anything busy.
+
 ## Upgrading
 
 Every Mac upgrades itself from GitHub; nothing is pushed from one Mac to another.
@@ -347,6 +364,7 @@ Every Mac upgrades itself from GitHub; nothing is pushed from one Mac to another
 | "Remote Control has not been enabled on this Mac yet" | Run `claude remote-control` once in a terminal there and accept. |
 | Sessions go offline at night | The Mac sleeps. `sudo pmset -c sleep 0`, or set `preventSleep: true`. |
 | Links missing for hand-started servers | They were started outside tmux, so there is no screen to read. The sessions still list with their own links. |
+| A second session in a folder whose name has a dot fails with "duplicate session" | Fixed in Oct 2026: tmux session names now replace dots and colons with underscores, and the agent addresses sessions by id. Upgrade CCA. |
 | `xcodebuild` or `codesign` fails with "User interaction is not allowed" | The session is not in the GUI login session. If it is a CCA session, check `keychainOk` in `list_status` and reinstall the agent; if you started it by hand over SSH, let CCA start it instead. See the keychain section. |
 | Everything offline after a reboot | FileVault is waiting for a password at the login screen. |
 

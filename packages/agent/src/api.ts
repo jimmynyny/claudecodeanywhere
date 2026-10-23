@@ -147,6 +147,12 @@ export function createApi(d: Deps): http.Server {
     }),
     compile('DELETE', '/api/sessions/:id', async ({ params }) => d.servers.stopSession(decodeURIComponent(params.id!))),
     compile('POST', '/api/sessions/:id/move', async ({ params }) => d.servers.moveSession(decodeURIComponent(params.id!))),
+    compile('POST', '/api/sessions/rename-all', async ({ body }) => ({ results: await d.servers.renameAllWithMachineSuffix(bool(body.force, false)) })),
+    compile('POST', '/api/sessions/:id/rename', async ({ params, body }) => {
+      const name = str(body.name);
+      if (!name) throw new ApiError(400, 'name is required');
+      return d.servers.renameSession(decodeURIComponent(params.id!), name, bool(body.force, false));
+    }),
     compile('POST', '/api/projects/:slug/pin', async ({ params, body }) => {
       const folder = d.projects.resolve(decodeURIComponent(params.slug!));
       return { pinned: d.projects.setPinned(folder, bool(body.pinned, true)) };

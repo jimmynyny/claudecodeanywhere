@@ -92,7 +92,7 @@ export function slugOf(folder: string): string {
 }
 
 export function tmuxNameFor(folder: string): string {
-  return `cca-${slugOf(folder)}`;
+  return `cca-${tmux.safeName(slugOf(folder))}`;
 }
 
 /**
@@ -287,7 +287,7 @@ export class ServerManager {
     const spawn = opts.spawn ?? prev?.spawn ?? this.cfg.defaultSpawn;
     const permissionMode = opts.permissionMode === undefined ? (prev?.permissionMode ?? this.cfg.defaultPermissionMode) : opts.permissionMode;
     const tmuxSession = tmuxNameFor(folder);
-    const target = tmux.sessionTarget(tmuxSession);
+    let target = '';
 
     try {
       if (await tmux.hasSession(tmuxSession)) await tmux.killSession(tmuxSession); // stale shell, no server in it
@@ -295,6 +295,7 @@ export class ServerManager {
       if (trust !== 'already') log(trust === 'recorded' ? 'info' : 'warn', `workspace trust ${trust}`, { folder });
       await permissions.applyToProject(folder, this.cfg.allowRules).catch((e) => log('warn', 'could not apply allow rules', e));
       await tmux.newSession(tmuxSession, folder);
+      target = await tmux.target(tmuxSession);
 
       const cmd = ['claude', 'remote-control', '--name', shellQuote(name)];
       if (opts.continue) cmd.push('--continue');
@@ -381,7 +382,8 @@ export class ServerManager {
     if (!s) return { folder, state: 'stopped', note: 'No running server for this folder' };
 
     const socket = s.tmuxSocket ?? tmux.DEFAULT_SOCKET;
-    if (s.tmuxSession) await tmux.sendKeys(tmux.sessionTarget(s.tmuxSession), ['C-c'], socket);
+    const t = s.tmuxSession ? await tmux.target(s.tmuxSession, socket).catch(() => null) : null;
+    if (t) await tmux.sendKeys(t, ['C-c'], socket);
     else if (s.pid) process.kill(s.pid, 'SIGINT');
 
     const deadline = Date.now() + 15_000;
@@ -413,7 +415,6 @@ export class ServerManager {
     let n = 1;
     while (await tmux.hasSession(`${base}-s${n}`)) n++;
     const tmuxSession = `${base}-s${n}`;
-    const target = tmux.sessionTarget(tmuxSession);
     const name = opts.fullName && opts.name
       ? ccaName(opts.name.trim(), this.cfg.machineName)
       : ccaName(`${path.basename(folder)}: ${opts.name?.trim() || (prompt ? summarize(prompt) : 'resumed')}`, this.cfg.machineName);
@@ -425,6 +426,7 @@ export class ServerManager {
     await this.dropSpareServer(folder);
 
     await tmux.newSession(tmuxSession, folder);
+    const target = await tmux.target(tmuxSession);
     const cmd = ['claude'];
     if (opts.resume) cmd.push('--resume', shellQuote(opts.resume));
     cmd.push('--remote-control', shellQuote(name));
@@ -480,8 +482,8 @@ export class ServerManager {
 
     const handoff = snap.handoffSessions.find((v) => v.tmuxSession === id || v.name === id || v.sessions.some(match));
     if (handoff?.tmuxSession) {
-      const target = tmux.sessionTarget(handoff.tmuxSession);
       const socket = handoff.tmuxSocket ?? tmux.DEFAULT_SOCKET;
+      const target = await tmux.target(handoff.tmuxSession, socket);
       await tmux.sendKeys(target, ['C-c'], socket);
       await sleep(800);
       await tmux.sendKeys(target, ['C-c'], socket); // Claude Code exits on a second Ctrl-C
@@ -547,6 +549,57 @@ export class ServerManager {
     const permissionMode = handoff ? (this.cfg.handoffPermissionMode ?? null) : null;
     await this.stopSession(session.sessionId);
     return this.startSession(folder, { resume: session.sessionId, name, fullName: true, permissionMode });
+  }
+
+  /**
+   * Rename a CCA-started session or server. Claude Code fixes a Remote Control title at process
+   * start, so a rename is a restart that keeps the conversation: handoff sessions resume with
+   * `claude --resume`, agent-started servers restart and their sessions come back. Busy things
+   * are skipped unless `force`. Hand-started servers are never restarted by CCA.
+   */
+  async renameSession(id: string, newName: string, force = false): Promise<{ renamed: boolean; name: string | null; link: string | null; note: string }> {
+    const snap = await this.snapshot();
+    const match = (x: SessionView) => x.name === id || x.sessionId === id || String(x.pid) === id;
+    const handoff = snap.handoffSessions.find((v) => v.tmuxSession === id || v.name === id || v.sessions.some(match));
+    if (handoff) {
+      const sess = handoff.sessions[0];
+      if (!sess) return { renamed: false, name: handoff.name, link: handoff.link, note: 'That session has not registered yet; try again in a few seconds.' };
+      if (!force && sess.status !== 'idle') return { renamed: false, name: handoff.name, link: handoff.link, note: `Skipped: it is ${sess.status}. Renaming restarts the session and would interrupt it; retry when idle or use force.` };
+      await this.stopSession(sess.sessionId);
+      const v = await this.startSession(handoff.folder, { resume: sess.sessionId, name: newName, fullName: true, permissionMode: this.cfg.handoffPermissionMode });
+      return { renamed: true, name: v.name, link: v.link, note: 'Restarted with the new name; the conversation and link are kept.' };
+    }
+    const server = snap.servers.find((v) => v.state === 'running' && (v.name === id || v.tmuxSession === id || v.slug === id || v.sessions.some(match)));
+    if (server) {
+      if (server.origin !== 'agent') return { renamed: false, name: server.name, link: server.link, note: 'This server was started by hand, so CCA will not restart it. Stop it yourself, then "start a session in <project>" gives a CCA-named server and resumes its sessions.' };
+      if (!force && server.sessions.some((x) => x.status !== 'idle')) return { renamed: false, name: server.name, link: server.link, note: 'Skipped: a session on this server is busy. Retry when idle or use force.' };
+      await this.stop(server.folder);
+      const v = await this.start(server.folder, { name: newName });
+      return { renamed: true, name: v.name, link: v.link, note: 'Server restarted with the new name; its sessions resumed.' };
+    }
+    return { renamed: false, name: null, link: null, note: `No CCA-started session or server matches "${id}".` };
+  }
+
+  /** Give every CCA-started session and server the " (<machine>)" suffix if it lacks it. */
+  async renameAllWithMachineSuffix(force = false): Promise<Array<{ target: string; renamed: boolean; name: string | null; note: string }>> {
+    const snap = await this.snapshot();
+    const suffix = ` (${this.cfg.machineName})`;
+    const targets = [
+      ...snap.handoffSessions.filter((v) => !v.name.endsWith(suffix)).map((v) => v.tmuxSession ?? v.name),
+      ...snap.servers.filter((v) => v.state === 'running' && v.origin === 'agent' && !v.name.endsWith(suffix) && v.folder !== path.join(APP_DIR, 'orchestrator')).map((v) => v.folder),
+    ];
+    const out: Array<{ target: string; renamed: boolean; name: string | null; note: string }> = [];
+    for (const t of targets) {
+      const current = snap.handoffSessions.find((v) => v.tmuxSession === t)?.name ?? snap.servers.find((v) => v.folder === t)?.name ?? t;
+      const id = snap.servers.find((v) => v.folder === t)?.slug ?? t;
+      try {
+        const r = await this.renameSession(id, ccaName(current, this.cfg.machineName), force);
+        out.push({ target: current, renamed: r.renamed, name: r.name, note: r.note });
+      } catch (e) {
+        out.push({ target: current, renamed: false, name: null, note: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    return out;
   }
 
   private async waitExit(pid: number | null): Promise<void> {

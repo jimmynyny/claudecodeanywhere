@@ -186,6 +186,26 @@ server.registerTool(
 );
 
 server.registerTool(
+  'rename_session',
+  {
+    title: 'Rename a CCA session or server (restart that keeps the conversation)',
+    description: 'Claude Code fixes a Remote Control title when the process starts, so renaming is a restart: a handoff session is resumed with claude --resume under the new name (conversation and link kept, running shell commands lost); an agent-started server restarts and its sessions resume. Busy targets are skipped unless force=true. Hand-started servers are not restarted by CCA. Names get the "CCA" prefix and " (<machine>)" suffix automatically. With machine_suffix=true and no session, every CCA-started session and server missing the machine suffix is renamed. Cheaper alternative for a live, idle session: ask it to run /rename itself.',
+    inputSchema: {
+      session: z.string().optional().describe('Session name, session id, pid, tmux session, or project folder name (for a server)'),
+      name: z.string().optional().describe('New title; required unless machine_suffix is true'),
+      machine_suffix: z.boolean().optional().describe('Rename everything CCA started that lacks " (<machine>)"'),
+      force: z.boolean().optional().describe('Also restart busy sessions (interrupts their current command)'),
+    },
+  },
+  ({ session, name, machine_suffix, force }) =>
+    wrap(async () => {
+      if (machine_suffix && !session) return call('POST', '/api/sessions/rename-all', { force });
+      if (!session || !name) throw new Error('session and name are required unless machine_suffix is true');
+      return call('POST', `/api/sessions/${encodeURIComponent(session)}/rename`, { name, force });
+    }),
+);
+
+server.registerTool(
   'allow_rules',
   {
     title: 'Pre-approve commands for sessions (permission allow rules)',

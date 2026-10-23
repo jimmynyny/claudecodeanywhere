@@ -59,8 +59,35 @@ export async function listPanes(): Promise<Pane[]> {
   return out;
 }
 
+/**
+ * tmux parses `.` and `:` inside a `-t` target as window/pane separators, so a session whose
+ * name contains a dot (a folder like vending.sellingtcg.com) can never be addressed by name.
+ * Resolve names to session ids ($N) and address those instead.
+ */
+export async function sessionId(name: string, socket = CCA_SOCKET): Promise<string | null> {
+  const r = await run('tmux', withSocket(socket, ['list-sessions', '-F', `#{session_id}${SEP}#{session_name}`]));
+  if (r.code !== 0) return null;
+  for (const line of r.stdout.split('\n')) {
+    const [id, n] = line.split(SEP);
+    if (n === name && id) return id;
+  }
+  return null;
+}
+
+/** Pane-command target for a session by name, immune to dots in the name. */
+export async function target(name: string, socket = CCA_SOCKET): Promise<string> {
+  const id = await sessionId(name, socket);
+  if (!id) throw new Error(`tmux session "${name}" not found on socket ${socket}`);
+  return `${id}:`;
+}
+
+/** Make a folder name safe as a tmux session name: dots and colons would break `-t` targets. */
+export function safeName(name: string): string {
+  return name.replace(/[.:]/g, '_');
+}
+
 export async function hasSession(name: string, socket = CCA_SOCKET): Promise<boolean> {
-  return (await run('tmux', withSocket(socket, ['has-session', '-t', exact(name)]))).code === 0;
+  return (await sessionId(name, socket)) !== null;
 }
 
 export async function newSession(name: string, cwd: string, socket = CCA_SOCKET): Promise<void> {
@@ -82,14 +109,15 @@ export async function capturePane(target: string, lines = 200, socket = CCA_SOCK
 }
 
 export async function killSession(name: string, socket = CCA_SOCKET): Promise<void> {
-  await run('tmux', withSocket(socket, ['kill-session', '-t', exact(name)]));
+  const id = await sessionId(name, socket);
+  if (id) await run('tmux', withSocket(socket, ['kill-session', '-t', id]));
 }
 
 /**
  * Pane-command target for a session: `=name:` means "exactly this session, its current window,
  * its active pane". Plain `=name` is only valid for session commands like has-session.
  */
-export const sessionTarget = (name: string): string => `=${name}:`;
+export const sessionTarget = (name: string): string => `=${name}:`; // only safe for names without dots; prefer target()
 
 /** Start CCA's tmux server from this process (the agent, in the GUI session) if it is not running. */
 export async function ensureServer(): Promise<'running' | 'started'> {
@@ -105,7 +133,7 @@ export async function ensureServer(): Promise<'running' | 'started'> {
 export async function probeKeychain(): Promise<{ ok: boolean; output: string }> {
   const name = 'cca-keychain-probe';
   const out = `/tmp/cca-keychain-probe-${process.pid}.txt`;
-  await run('tmux', withSocket(CCA_SOCKET, ['kill-session', '-t', exact(name)]));
+  await killSession(name);
   const cmd = `security show-keychain-info "$HOME/Library/Keychains/login.keychain-db" >${out} 2>&1; echo EXIT:$? >>${out}`;
   const r = await run('tmux', withSocket(CCA_SOCKET, ['new-session', '-d', '-s', name, cmd]));
   if (r.code !== 0) return { ok: false, output: r.stderr.trim() };
