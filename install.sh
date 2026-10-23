@@ -22,6 +22,7 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$HOME/Library/Application Support/ClaudeCodeAnywhere"
 CONFIG="$APP_DIR/config.json"
 PORT="${CCA_PORT:-7777}"
+UID_NUM="$(id -u)"
 CHECK=0; YES=0; GITHUB=1; ROOT=""; NAME=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -133,11 +134,10 @@ else
 fi
 
 # ---------------------------------------------------------------- Remote Control consent
-step "6. Remote Control one-time acceptance"
-rc_seen() { node -e 'const fs=require("fs");try{const j=JSON.parse(fs.readFileSync(process.env.HOME+"/.claude.json","utf8"));process.exit(j.remoteDialogSeen===true?0:1)}catch{process.exit(1)}'; }
-if rc_seen; then ok "Remote Control has been accepted on this Mac"
-elif [ $CHECK -eq 1 ] || [ $YES -eq 1 ]; then fail "Remote Control not yet accepted: run 'claude remote-control' once in a terminal, answer y, then Ctrl-C"; PROBLEMS=$((PROBLEMS+1))
-else
+# Claude Code asks once per Mac before it serves sessions remotely. There is no reliable way to
+# read whether that happened, so the check is functional: the agent reports it when a server
+# cannot start (step 10), and this function walks through the acceptance when needed.
+rc_accept_interactive() {
   echo "  Claude Code asks once per Mac before it will serve sessions remotely."
   echo "  A server will start now: answer ${bold}y${reset} if asked 'Enable Remote Control?', wait for 'Connected',"
   echo "  then press ${bold}Ctrl-C${reset} to come back here."
@@ -145,8 +145,9 @@ else
   TMPD=$(mktemp -d /tmp/cca-rc-check.XXXX)
   (cd "$TMPD" && claude remote-control --name "CCA setup check" --spawn=session </dev/tty) || true
   rm -rf "$TMPD"
-  if rc_seen; then ok "Remote Control accepted"; else warn "could not confirm acceptance; the agent will report it if a server fails to start"; fi
-fi
+}
+step "6. Remote Control one-time acceptance"
+echo "  checked after the agent starts (step 10)"
 
 # ---------------------------------------------------------------- config
 step "7. Configuration ($CONFIG)"
@@ -190,7 +191,35 @@ else
   CCA_PORT="$PORT" "$REPO/scripts/install-agent.sh" | sed 's/^/  /'
 fi
 
-# ---------------------------------------------------------------- result
+# ---------------------------------------------------------------- Remote Control check + result
+# Wait for the Orchestrator to come up, or for the agent to say why it cannot.
+wait_for_orchestrator() { # prints: up | rc-needed | other | down
+  local i s
+  for i in $(seq 1 "${1:-45}"); do
+    s=$(curl -sf --max-time 5 "http://127.0.0.1:$PORT/api/status" 2>/dev/null || true)
+    if [ -n "$s" ]; then
+      r=$(node -e 'const s=JSON.parse(process.argv[1]); if (s.orchestrator && s.orchestrator.link) console.log("up"); else if (s.warnings.some(w=>/Remote Control has not been enabled/.test(w))) console.log("rc-needed"); else console.log("")' "$s")
+      [ -n "$r" ] && { echo "$r"; return; }
+    fi
+    sleep 1
+  done
+  [ -n "$s" ] && echo other || echo down
+}
+if [ $CHECK -eq 0 ]; then
+  step "10. Remote Control acceptance (functional check)"
+  R=$(wait_for_orchestrator 45)
+  if [ "$R" = "rc-needed" ]; then
+    if [ $YES -eq 1 ]; then fail "Remote Control not yet accepted: run 'claude remote-control' once in a terminal, answer y, Ctrl-C, then: launchctl kickstart -k gui/$(id -u)/com.claudecodeanywhere.agent"; PROBLEMS=$((PROBLEMS+1))
+    else
+      rc_accept_interactive
+      launchctl kickstart -k "gui/$UID_NUM/com.claudecodeanywhere.agent"
+      R=$(wait_for_orchestrator 60)
+      [ "$R" = "up" ] && ok "Remote Control accepted; Orchestrator is up" || warn "the Orchestrator has not appeared yet; check ~/Library/Logs/ClaudeCodeAnywhere/agent.log"
+    fi
+  elif [ "$R" = "up" ]; then ok "Remote Control works; Orchestrator is up"
+  fi
+fi
+
 step "Result"
 STATUS=$(curl -sf --max-time 5 "http://127.0.0.1:$PORT/api/status" 2>/dev/null || true)
 if [ -z "$STATUS" ]; then
